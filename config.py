@@ -62,10 +62,10 @@ class Config:
     
     # LLM Configuration
     LLM = {
-        "model": os.getenv("LLM_MODEL", "llama3.1:70b-instruct-q4_0"),
+        "model": os.getenv("LLM_MODEL", "llama3.1:8b-instruct-q4_0"),
         "ollama_url": os.getenv("OLLAMA_URL", "http://localhost:11434"),
         "temperature": 0.7,
-        "max_tokens": 500,
+        "max_tokens": 400,  # Reduced for 8GB GPU
         "top_p": 0.9,
         "system_prompt": """You are a professional logistics dispatcher for PRIME CARGO LOGISTICS INC. 
         You help drivers with delivery information, routes, order status, and logistics issues.
@@ -117,11 +117,11 @@ class Config:
     
     # Performance Configuration
     PERFORMANCE = {
-        "max_concurrent_calls": int(os.getenv("MAX_CONCURRENT_CALLS", "10")),
+        "max_concurrent_calls": int(os.getenv("MAX_CONCURRENT_CALLS", "5")),  # Reduced for RTX 4060
         "response_timeout": 30,  # seconds
         "call_timeout": 300,  # seconds
         "use_gpu": os.getenv("USE_GPU", "True").lower() == "true",
-        "gpu_memory_fraction": 0.8
+        "gpu_memory_fraction": 0.7  # Reduced for RTX 4060 8GB to prevent OOM
     }
     
     # Security Configuration
