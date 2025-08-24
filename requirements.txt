@@ -1,4 +1,4 @@
-# Core dependencies
+# Core web framework
 flask
 flask-cors
 requests
@@ -14,38 +14,23 @@ soundfile
 
 # Text-to-Speech
 TTS
-coqui-tts
 
-# LLM and AI
-ollama
-openai
-
-# Audio processing
+# Audio processing  
 pydub
 webrtcvad
 pyaudio
 
-# RingCentral SDK
+# RingCentral API
 ringcentral
-ringcentral-sdk
 
 # Utilities
 python-multipart
 aiofiles
 aiohttp
 websockets
-asyncio
 
 # Logging and monitoring
 structlog
-prometheus-client
-
-# Development and testing (optional)
-pytest
-pytest-asyncio
-black
-flake8
 
 # System utilities
 psutil
-GPUtil

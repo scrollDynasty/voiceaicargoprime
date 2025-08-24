@@ -4,6 +4,7 @@ Handles Speech-to-Text (Whisper) and Text-to-Speech (Coqui TTS)
 """
 
 import os
+import io
 import tempfile
 import logging
 import numpy as np
