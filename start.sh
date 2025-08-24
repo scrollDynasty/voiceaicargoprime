@@ -95,6 +95,11 @@ start_system() {
     # Set environment variables
     export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
     
+    # Ollama GPU optimization for RTX 4060 8GB
+    export OLLAMA_NUM_PARALLEL=2
+    export OLLAMA_MAX_LOADED_MODELS=1
+    export OLLAMA_GPU_MEMORY_FRACTION=0.7
+    
     # Start the system
     log "Launching Voice AI System..."
     if [[ "$1" == "--debug" ]]; then
