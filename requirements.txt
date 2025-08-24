@@ -1,0 +1,51 @@
+# Core dependencies
+flask
+flask-cors
+requests
+python-dotenv
+
+# Speech processing
+openai-whisper
+torch
+torchaudio
+numpy
+librosa
+soundfile
+
+# Text-to-Speech
+TTS
+coqui-tts
+
+# LLM and AI
+ollama
+openai
+
+# Audio processing
+pydub
+webrtcvad
+pyaudio
+
+# RingCentral SDK
+ringcentral
+ringcentral-sdk
+
+# Utilities
+python-multipart
+aiofiles
+aiohttp
+websockets
+asyncio
+
+# Logging and monitoring
+structlog
+prometheus-client
+
+# Development and testing (optional)
+pytest
+pytest-asyncio
+black
+flake8
+
+# System utilities
+psutil
+GPUtil
