@@ -1,11 +1,13 @@
 """
-Webhook Server for RingCentral Integration
-Handles incoming calls and webhook events from RingCentral
+Webhook Server для RingCentral интеграции
+Обрабатывает telephony/sessions события от RingCentral
 """
 
 import logging
 import json
 import asyncio
+import hmac
+import hashlib
 from datetime import datetime
 from typing import Dict, Any, Optional
 from flask import Flask, request, jsonify, Response
@@ -15,8 +17,9 @@ import time
 
 from voice_ai_engine import voice_ai_engine
 from config import Config
+from ringcentral_client import get_ringcentral_client
 
-# Configure logging
+# Настройка логирования
 logging.basicConfig(
     level=getattr(logging, Config.LOGGING["level"]),
     format=Config.LOGGING["format"],
@@ -28,281 +31,431 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Create Flask app
+# Создание Flask приложения
 app = Flask(__name__)
 CORS(app)
 
-# Global variables
+# Глобальные переменные
 active_calls = {}
 call_lock = threading.Lock()
+ringcentral_client = None
+subscription_id = None
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
+    """Проверка здоровья сервиса"""
     try:
-        health_data = voice_ai_engine.health_check()
+        health_data = {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "ringcentral_connected": ringcentral_client is not None and ringcentral_client.platform.logged_in(),
+            "subscription_active": subscription_id is not None,
+            "active_calls": len(active_calls),
+            "voice_ai_status": voice_ai_engine.health_check()
+        }
         return jsonify(health_data), 200
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return jsonify({"status": "unhealthy", "error": str(e)}), 500
 
-@app.route('/metrics', methods=['GET'])
-def get_metrics():
-    """Get system metrics"""
-    try:
-        metrics = voice_ai_engine.get_metrics()
-        return jsonify(metrics), 200
-    except Exception as e:
-        logger.error(f"Failed to get metrics: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/calls', methods=['GET'])
-def get_active_calls():
-    """Get list of active calls"""
-    try:
-        calls = voice_ai_engine.get_active_calls()
-        return jsonify(calls), 200
-    except Exception as e:
-        logger.error(f"Failed to get active calls: {e}")
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/webhook', methods=['POST'])
 def ringcentral_webhook():
     """
-    Main webhook endpoint for RingCentral events
+    Основной endpoint для RingCentral webhook событий
     
-    Handles:
-    - Incoming call notifications
-    - Call status updates
-    - Audio data
+    Обрабатывает:
+    - Validation token при установке webhook
+    - telephony/sessions события
+    - Входящие звонки
     """
     try:
-        # Verify webhook signature (if configured)
+        # Получаем заголовки
+        headers = request.headers
+        
+        # Проверка validation token
+        validation_token = headers.get('Validation-Token')
+        if validation_token:
+            logger.info("Получен validation token для webhook")
+            # Отвечаем с validation token в заголовке
+            return Response(
+                status=200,
+                headers={'Validation-Token': validation_token}
+            )
+        
+        # Проверка подписи webhook (если настроено)
         if not _verify_webhook_signature(request):
-            logger.warning("Invalid webhook signature")
+            logger.warning("Неверная подпись webhook")
             return jsonify({"error": "Invalid signature"}), 401
         
-        # Parse webhook data
+        # Парсим данные webhook
         webhook_data = request.get_json()
         if not webhook_data:
-            logger.error("No JSON data in webhook request")
+            logger.error("Нет JSON данных в webhook запросе")
             return jsonify({"error": "No data received"}), 400
         
-        logger.info(f"Received webhook: {webhook_data.get('eventType', 'unknown')}")
+        logger.info(f"Получено webhook событие: {json.dumps(webhook_data, indent=2)}")
         
-        # Handle different event types
-        event_type = webhook_data.get('eventType', '')
+        # Обрабатываем событие
+        event = webhook_data.get('event', '')
+        body = webhook_data.get('body', {})
         
-        if event_type == 'IncomingCall':
-            return _handle_incoming_call(webhook_data)
-        elif event_type == 'CallStatus':
-            return _handle_call_status(webhook_data)
-        elif event_type == 'AudioData':
-            return _handle_audio_data(webhook_data)
-        elif event_type == 'CallEnded':
-            return _handle_call_ended(webhook_data)
+        # Проверяем тип события telephony/sessions
+        if '/telephony/sessions' in event:
+            return _handle_telephony_session(body)
         else:
-            logger.info(f"Unhandled event type: {event_type}")
+            logger.info(f"Неизвестный тип события: {event}")
             return jsonify({"status": "received"}), 200
             
     except Exception as e:
-        logger.error(f"Webhook processing error: {e}")
+        logger.error(f"Ошибка обработки webhook: {e}")
         return jsonify({"error": str(e)}), 500
 
 def _verify_webhook_signature(request) -> bool:
-    """Verify webhook signature from RingCentral"""
-    # In production, implement proper signature verification
-    # For now, return True to allow all requests
-    return True
+    """
+    Проверка подписи webhook от RingCentral
+    
+    Args:
+        request: Flask request объект
+        
+    Returns:
+        bool: True если подпись валидна
+    """
+    # Получаем подпись из заголовка
+    signature = request.headers.get('X-Signature')
+    if not signature:
+        # Если подпись не требуется
+        return True
+    
+    # Получаем секрет из конфигурации
+    webhook_secret = Config.RINGCENTRAL.get('webhook_secret')
+    if not webhook_secret:
+        logger.warning("Webhook secret не настроен")
+        return True
+    
+    # Вычисляем ожидаемую подпись
+    body = request.get_data()
+    expected_signature = hmac.new(
+        webhook_secret.encode('utf-8'),
+        body,
+        hashlib.sha256
+    ).hexdigest()
+    
+    # Сравниваем подписи
+    return hmac.compare_digest(signature, expected_signature)
 
-def _handle_incoming_call(webhook_data: Dict[str, Any]) -> Response:
-    """Handle incoming call notification"""
+def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
+    """
+    Обработка telephony/sessions событий
+    
+    Args:
+        session_data: Данные телефонной сессии
+        
+    Returns:
+        Response: Flask ответ
+    """
     try:
-        call_data = {
-            "callId": webhook_data.get("callId"),
-            "from": webhook_data.get("from", {}),
-            "to": webhook_data.get("to", {}),
-            "direction": webhook_data.get("direction", "inbound"),
-            "timestamp": datetime.now().isoformat()
-        }
+        # Извлекаем информацию о сессии
+        telephony_session_id = session_data.get('telephonySessionId')
+        parties = session_data.get('parties', [])
         
-        logger.info(f"Handling incoming call: {call_data['callId']}")
+        logger.info(f"Обработка telephony session: {telephony_session_id}")
         
-        # Process call asynchronously
-        def process_call():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                response = loop.run_until_complete(
-                    voice_ai_engine.handle_incoming_call(call_data)
-                )
-                logger.info(f"Call {call_data['callId']} processed: {response.get('action')}")
-            except Exception as e:
-                logger.error(f"Failed to process call {call_data['callId']}: {e}")
-            finally:
-                loop.close()
+        # Находим входящий звонок
+        for party in parties:
+            direction = party.get('direction')
+            status = party.get('status', {})
+            party_id = party.get('id')
+            
+            # Проверяем входящий звонок в состоянии "Proceeding"
+            if direction == 'Inbound' and status.get('code') == 'Proceeding':
+                logger.info(f"Обнаружен входящий звонок: session={telephony_session_id}, party={party_id}")
+                
+                # Подготавливаем данные звонка
+                call_data = {
+                    "callId": f"{telephony_session_id}_{party_id}",
+                    "telephonySessionId": telephony_session_id,
+                    "partyId": party_id,
+                    "from": party.get('from', {}),
+                    "to": party.get('to', {}),
+                    "direction": direction,
+                    "status": status,
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                # Сохраняем информацию о звонке
+                with call_lock:
+                    active_calls[call_data["callId"]] = call_data
+                
+                # Обрабатываем звонок асинхронно
+                def process_incoming_call():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        # Автоматически отвечаем на звонок
+                        loop.run_until_complete(
+                            _answer_and_process_call(call_data)
+                        )
+                    except Exception as e:
+                        logger.error(f"Ошибка обработки входящего звонка: {e}")
+                    finally:
+                        loop.close()
+                
+                # Запускаем обработку в фоновом потоке
+                thread = threading.Thread(target=process_incoming_call)
+                thread.daemon = True
+                thread.start()
+                
+            # Обрабатываем изменения статуса
+            elif party_id:
+                call_id = f"{telephony_session_id}_{party_id}"
+                with call_lock:
+                    if call_id in active_calls:
+                        active_calls[call_id]["status"] = status
+                        active_calls[call_id]["last_update"] = datetime.now().isoformat()
+                        
+                        # Если звонок завершен, удаляем из активных
+                        if status.get('code') in ['Disconnected', 'Gone']:
+                            logger.info(f"Звонок {call_id} завершен")
+                            del active_calls[call_id]
         
-        # Start processing in background thread
-        thread = threading.Thread(target=process_call)
-        thread.daemon = True
-        thread.start()
+        return jsonify({"status": "processed"}), 200
         
-        # Return immediate response to RingCentral
+    except Exception as e:
+        logger.error(f"Ошибка обработки telephony session: {e}")
+        return jsonify({"error": str(e)}), 500
+
+async def _answer_and_process_call(call_data: Dict[str, Any]):
+    """
+    Ответить на звонок и начать обработку
+    
+    Args:
+        call_data: Данные о звонке
+    """
+    try:
+        telephony_session_id = call_data['telephonySessionId']
+        party_id = call_data['partyId']
+        
+        # Отвечаем на звонок через RingCentral API
+        if ringcentral_client:
+            success = await ringcentral_client.answer_call(telephony_session_id, party_id)
+            if success:
+                logger.info(f"Успешно ответили на звонок {call_data['callId']}")
+                
+                # Передаем звонок в Voice AI Engine для обработки
+                response = await voice_ai_engine.handle_incoming_call(call_data)
+                logger.info(f"Voice AI обработал звонок: {response}")
+            else:
+                logger.error(f"Не удалось ответить на звонок {call_data['callId']}")
+        else:
+            logger.error("RingCentral клиент не инициализирован")
+            
+    except Exception as e:
+        logger.error(f"Ошибка при ответе на звонок: {e}")
+
+@app.route('/calls', methods=['GET'])
+def get_active_calls():
+    """Получить список активных звонков"""
+    try:
+        with call_lock:
+            calls_list = list(active_calls.values())
         return jsonify({
-            "status": "accepted",
-            "callId": call_data["callId"],
-            "message": "Call processing started"
+            "total": len(calls_list),
+            "calls": calls_list
         }), 200
-        
     except Exception as e:
-        logger.error(f"Failed to handle incoming call: {e}")
+        logger.error(f"Ошибка получения списка звонков: {e}")
         return jsonify({"error": str(e)}), 500
 
-def _handle_call_status(webhook_data: Dict[str, Any]) -> Response:
-    """Handle call status updates"""
+@app.route('/call/<call_id>/transfer', methods=['POST'])
+def transfer_call(call_id: str):
+    """
+    Перевести звонок на другой номер
+    
+    Body:
+        {
+            "transferTo": "+1234567890",
+            "transferType": "blind" // или "attended"
+        }
+    """
     try:
-        call_id = webhook_data.get("callId")
-        status = webhook_data.get("status")
+        data = request.get_json()
+        transfer_to = data.get('transferTo')
+        transfer_type = data.get('transferType', 'blind')
         
-        logger.info(f"Call {call_id} status: {status}")
+        if not transfer_to:
+            return jsonify({"error": "transferTo is required"}), 400
         
-        # Update call status in our tracking
+        # Находим звонок
         with call_lock:
-            if call_id in active_calls:
-                active_calls[call_id]["status"] = status
-                active_calls[call_id]["last_update"] = datetime.now().isoformat()
+            call_data = active_calls.get(call_id)
         
-        return jsonify({"status": "updated"}), 200
+        if not call_data:
+            return jsonify({"error": "Call not found"}), 404
         
+        # Переводим звонок
+        async def do_transfer():
+            success = await ringcentral_client.transfer_call(
+                call_data['telephonySessionId'],
+                call_data['partyId'],
+                transfer_to,
+                transfer_type
+            )
+            return success
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        success = loop.run_until_complete(do_transfer())
+        loop.close()
+        
+        if success:
+            return jsonify({"status": "transferred"}), 200
+        else:
+            return jsonify({"error": "Transfer failed"}), 500
+            
     except Exception as e:
-        logger.error(f"Failed to handle call status: {e}")
+        logger.error(f"Ошибка перевода звонка: {e}")
         return jsonify({"error": str(e)}), 500
 
-def _handle_audio_data(webhook_data: Dict[str, Any]) -> Response:
-    """Handle incoming audio data from call"""
+@app.route('/call/<call_id>/hangup', methods=['DELETE'])
+def hangup_call(call_id: str):
+    """Завершить звонок"""
     try:
-        call_id = webhook_data.get("callId")
-        audio_data = webhook_data.get("audioData")
-        
-        if not audio_data:
-            return jsonify({"error": "No audio data"}), 400
-        
-        logger.info(f"Received audio data for call {call_id}")
-        
-        # Store audio data for processing
+        # Находим звонок
         with call_lock:
-            if call_id in active_calls:
-                active_calls[call_id]["audio_buffer"] = audio_data
-                active_calls[call_id]["last_audio"] = datetime.now().isoformat()
+            call_data = active_calls.get(call_id)
         
-        return jsonify({"status": "received"}), 200
+        if not call_data:
+            return jsonify({"error": "Call not found"}), 404
         
+        # Завершаем звонок
+        async def do_hangup():
+            success = await ringcentral_client.hangup_call(
+                call_data['telephonySessionId'],
+                call_data['partyId']
+            )
+            return success
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        success = loop.run_until_complete(do_hangup())
+        loop.close()
+        
+        if success:
+            # Удаляем из активных звонков
+            with call_lock:
+                if call_id in active_calls:
+                    del active_calls[call_id]
+            return jsonify({"status": "hangup"}), 200
+        else:
+            return jsonify({"error": "Hangup failed"}), 500
+            
     except Exception as e:
-        logger.error(f"Failed to handle audio data: {e}")
+        logger.error(f"Ошибка завершения звонка: {e}")
         return jsonify({"error": str(e)}), 500
 
-def _handle_call_ended(webhook_data: Dict[str, Any]) -> Response:
-    """Handle call ended notification"""
+@app.route('/subscription/create', methods=['POST'])
+def create_subscription():
+    """Создать webhook подписку вручную"""
     try:
-        call_id = webhook_data.get("callId")
-        reason = webhook_data.get("reason", "unknown")
+        if not ringcentral_client:
+            return jsonify({"error": "RingCentral client not initialized"}), 500
         
-        logger.info(f"Call {call_id} ended: {reason}")
+        # Создаем подписку
+        async def do_create_subscription():
+            return await _create_webhook_subscription()
         
-        # Clean up call data
-        with call_lock:
-            if call_id in active_calls:
-                del active_calls[call_id]
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        subscription_info = loop.run_until_complete(do_create_subscription())
+        loop.close()
         
-        return jsonify({"status": "ended"}), 200
-        
+        if subscription_info:
+            global subscription_id
+            subscription_id = subscription_info['id']
+            return jsonify(subscription_info), 200
+        else:
+            return jsonify({"error": "Failed to create subscription"}), 500
+            
     except Exception as e:
-        logger.error(f"Failed to handle call ended: {e}")
+        logger.error(f"Ошибка создания подписки: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/test', methods=['POST'])
-def test_call():
-    """Test endpoint for simulating calls"""
+async def _create_webhook_subscription():
+    """Создать webhook подписку для telephony/sessions событий"""
     try:
-        test_data = {
-            "callId": f"test_{int(time.time())}",
-            "from": {"phoneNumber": "+1234567890"},
-            "to": {"phoneNumber": Config.RINGCENTRAL["main_number"]},
-            "direction": "inbound"
+        # Фильтры событий для telephony sessions
+        event_filters = [
+            '/restapi/v1.0/account/~/extension/~/telephony/sessions'
+        ]
+        
+        # Настройки доставки webhook
+        delivery_mode = {
+            'transportType': 'WebHook',
+            'address': Config.RINGCENTRAL['webhook_url'],
+            'verificationToken': Config.RINGCENTRAL.get('webhook_secret', '')
         }
         
-        # Process test call
-        def process_test_call():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                response = loop.run_until_complete(
-                    voice_ai_engine.handle_incoming_call(test_data)
-                )
-                logger.info(f"Test call processed: {response}")
-            except Exception as e:
-                logger.error(f"Test call failed: {e}")
-            finally:
-                loop.close()
+        logger.info(f"Создаем webhook подписку на {Config.RINGCENTRAL['webhook_url']}")
         
-        thread = threading.Thread(target=process_test_call)
-        thread.daemon = True
-        thread.start()
+        # Создаем подписку
+        subscription_info = await ringcentral_client.create_webhook_subscription(
+            event_filters,
+            delivery_mode
+        )
         
-        return jsonify({
-            "status": "test_call_started",
-            "callId": test_data["callId"]
-        }), 200
+        return subscription_info
         
     except Exception as e:
-        logger.error(f"Test call failed: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Ошибка создания webhook подписки: {e}")
+        return None
 
-@app.route('/config', methods=['GET'])
-def get_config():
-    """Get current configuration (without sensitive data)"""
+async def initialize_ringcentral():
+    """Инициализация RingCentral клиента и создание подписки"""
+    global ringcentral_client, subscription_id
+    
     try:
-        safe_config = {
-            "webhook": {
-                "host": Config.WEBHOOK["host"],
-                "port": Config.WEBHOOK["port"],
-                "debug": Config.WEBHOOK["debug"]
-            },
-            "performance": Config.PERFORMANCE,
-            "speech": {
-                "whisper_model": Config.SPEECH["whisper_model"],
-                "language": Config.SPEECH["language"]
-            },
-            "llm": {
-                "model": Config.LLM["model"],
-                "temperature": Config.LLM["temperature"]
-            }
-        }
-        return jsonify(safe_config), 200
+        logger.info("Инициализация RingCentral клиента...")
+        
+        # Создаем клиент
+        ringcentral_client = get_ringcentral_client(Config.RINGCENTRAL)
+        
+        # Авторизуемся
+        if await ringcentral_client.authenticate():
+            logger.info("RingCentral авторизация успешна")
+            
+            # Создаем webhook подписку
+            subscription_info = await _create_webhook_subscription()
+            if subscription_info:
+                subscription_id = subscription_info['id']
+                logger.info(f"Webhook подписка создана: {subscription_id}")
+            else:
+                logger.warning("Не удалось создать webhook подписку")
+        else:
+            logger.error("Ошибка авторизации RingCentral")
+            
     except Exception as e:
-        logger.error(f"Failed to get config: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.errorhandler(404)
-def not_found(error):
-    """Handle 404 errors"""
-    return jsonify({"error": "Endpoint not found"}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    """Handle 500 errors"""
-    logger.error(f"Internal server error: {error}")
-    return jsonify({"error": "Internal server error"}), 500
+        logger.error(f"Ошибка инициализации RingCentral: {e}")
 
 def start_server():
-    """Start the webhook server"""
+    """Запуск webhook сервера"""
     try:
-        logger.info(f"Starting webhook server on {Config.WEBHOOK['host']}:{Config.WEBHOOK['port']}")
+        logger.info(f"Запуск webhook сервера на {Config.WEBHOOK['host']}:{Config.WEBHOOK['port']}")
         
-        # Initialize Voice AI engine
-        logger.info("Initializing Voice AI engine...")
+        # Инициализируем RingCentral в отдельном потоке
+        def init_ringcentral():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(initialize_ringcentral())
+            loop.close()
         
-        # Start server
+        init_thread = threading.Thread(target=init_ringcentral)
+        init_thread.daemon = True
+        init_thread.start()
+        
+        # Инициализируем Voice AI engine
+        logger.info("Инициализация Voice AI engine...")
+        
+        # Запускаем сервер
         app.run(
             host=Config.WEBHOOK["host"],
             port=Config.WEBHOOK["port"],
@@ -311,8 +464,19 @@ def start_server():
         )
         
     except Exception as e:
-        logger.error(f"Failed to start webhook server: {e}")
+        logger.error(f"Ошибка запуска webhook сервера: {e}")
         raise
+
+@app.errorhandler(404)
+def not_found(error):
+    """Обработка 404 ошибок"""
+    return jsonify({"error": "Endpoint not found"}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Обработка 500 ошибок"""
+    logger.error(f"Internal server error: {error}")
+    return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == '__main__':
     start_server()
