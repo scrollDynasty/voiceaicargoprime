@@ -47,40 +47,99 @@ class RingCentralClient:
         
         logger.info("RingCentral клиент инициализирован")
     
-    async def authenticate(self) -> bool:
-        """
-        Аутентификация с использованием JWT токена
+    def log_auth_status(self):
+        """Логирование текущей конфигурации авторизации"""
+        jwt_present = "✅ Present" if os.getenv('RINGCENTRAL_JWT_TOKEN') else "❌ Missing"
+        auth_method = os.getenv('RINGCENTRAL_AUTH_METHOD', 'jwt')
         
-        Returns:
-            bool: True если успешно, False если ошибка
-        """
+        logger.info("🔐 RingCentral Authentication Status:")
+        logger.info(f"   Auth Method: {auth_method}")
+        logger.info(f"   JWT Token: {jwt_present}")
+        logger.info(f"   Client ID: {self.config.get('client_id', 'Missing')}")
+        logger.info(f"   Server: {self.config.get('server', 'Missing')}")
+    
+    async def authenticate_jwt(self) -> bool:
+        """Аутентификация с использованием JWT токена"""
         try:
-            # Получаем JWT токен из переменной окружения
             jwt_token = os.getenv('RINGCENTRAL_JWT_TOKEN')
             
             if not jwt_token:
-                # Если нет JWT, пробуем логин/пароль (для обратной совместимости)
-                logger.warning("JWT токен не найден, используем логин/пароль")
-                self.platform.login(
-                    username=self.config['username'],
-                    password=self.config['password']
-                )
-            else:
-                # Используем JWT для авторизации
-                self.platform.login(jwt=jwt_token)
+                raise Exception("RINGCENTRAL_JWT_TOKEN not found in environment")
+            
+            logger.info("🔑 Attempting JWT authentication...")
+            self.platform.login(jwt=jwt_token)
             
             # Получаем информацию о токене
             token_info = self.platform.auth().data()
             self.token_expires_at = time.time() + token_info.get('expires_in', 3600)
             
-            logger.info("Успешная авторизация в RingCentral")
+            # Получаем информацию о пользователе для проверки
+            extension_info = self.platform.get('/restapi/v1.0/account/~/extension/~').json()
+            logger.info(f"✅ RingCentral successfully authenticated with JWT! User: {extension_info.get('name', 'Unknown')}")
+            
             return True
             
         except ApiException as e:
-            logger.error(f"Ошибка авторизации RingCentral: {e}")
-            return False
+            error_msg = str(e)
+            if "OAU-251" in error_msg or "unauthorized_client" in error_msg:
+                logger.error(f"❌ JWT authentication failed - unauthorized client: {e}")
+            else:
+                logger.error(f"❌ RingCentral JWT authentication failed: {e}")
+            raise
         except Exception as e:
-            logger.error(f"Неожиданная ошибка при авторизации: {e}")
+            logger.error(f"❌ JWT authentication error: {e}")
+            raise
+    
+    async def authenticate_password(self) -> bool:
+        """Fallback аутентификация с использованием логина и пароля"""
+        try:
+            username = self.config.get('username')
+            password = self.config.get('password')
+            
+            if not all([username, password]):
+                raise Exception("Missing username or password for fallback authentication")
+            
+            logger.warning("⚠️ Using deprecated username/password authentication as fallback")
+            self.platform.login(username=username, password=password)
+            
+            # Получаем информацию о токене
+            token_info = self.platform.auth().data()
+            self.token_expires_at = time.time() + token_info.get('expires_in', 3600)
+            
+            logger.info("✅ Successfully authenticated with username/password (fallback)")
+            return True
+            
+        except ApiException as e:
+            logger.error(f"❌ RingCentral password authentication failed: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"❌ Password authentication error: {e}")
+            raise
+    
+    async def authenticate(self) -> bool:
+        """
+        Аутентификация с использованием JWT токена с fallback на логин/пароль
+        
+        Returns:
+            bool: True если успешно, False если ошибка
+        """
+        # Логируем статус авторизации
+        self.log_auth_status()
+        
+        auth_method = os.getenv('RINGCENTRAL_AUTH_METHOD', 'jwt')
+        
+        try:
+            if auth_method == 'jwt':
+                try:
+                    return await self.authenticate_jwt()
+                except Exception as jwt_error:
+                    logger.warning(f"JWT authentication failed: {jwt_error}, trying password fallback...")
+                    return await self.authenticate_password()
+            else:
+                return await self.authenticate_password()
+                
+        except Exception as e:
+            logger.error(f"❌ All authentication methods failed: {e}")
             return False
     
     async def refresh_token(self) -> bool:
@@ -458,3 +517,52 @@ def get_ringcentral_client(config: Dict[str, Any]) -> RingCentralClient:
         _client_instance = RingCentralClient(config)
     
     return _client_instance
+
+
+async def test_ringcentral_auth():
+    """Тестовая функция для проверки RingCentral авторизации"""
+    from config import Config
+    
+    logger.info("🧪 Starting RingCentral authentication test...")
+    
+    try:
+        # Создаем клиент
+        client = get_ringcentral_client(Config.RINGCENTRAL)
+        
+        # Тестируем авторизацию
+        auth_result = await client.authenticate()
+        
+        if auth_result:
+            # Проверяем API вызов
+            try:
+                response = client.platform.get('/restapi/v1.0/account/~/extension/~')
+                user_info = response.json()
+                logger.info(f"✅ Authentication test PASSED!")
+                logger.info(f"   User: {user_info.get('name', 'Unknown')}")
+                logger.info(f"   Extension: {user_info.get('extensionNumber', 'Unknown')}")
+                logger.info(f"   Status: {user_info.get('status', 'Unknown')}")
+                return True
+            except Exception as api_error:
+                logger.error(f"❌ API test failed: {api_error}")
+                return False
+        else:
+            logger.error("❌ Authentication test FAILED - could not authenticate")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Authentication test FAILED with error: {e}")
+        return False
+
+
+# Для запуска теста из командной строки
+if __name__ == "__main__":
+    import asyncio
+    
+    # Настройка логирования для теста
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    # Запуск теста
+    asyncio.run(test_ringcentral_auth())

@@ -22,7 +22,8 @@ class Config:
         "main_number": os.getenv("RINGCENTRAL_MAIN_NUMBER", "(513) 572-5833"),
         "webhook_url": os.getenv("WEBHOOK_URL", "https://301849761dd5.ngrok-free.app/webhook"), 
         "webhook_secret": os.getenv("WEBHOOK_SECRET", "c828fad557ae2bb7e6ea8488b5a764124e1c7d619187b46f80d83a7541ea0f6a"),
-        "jwt_token": os.getenv("RINGCENTRAL_JWT_TOKEN", "eyJraWQiOiI4NzYyZjU5OGQwNTk0NGRiODZiZjVjYTk3ODA0NzYwOCIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJhdWQiOiJodHRwczovL3BsYXRmb3JtLnJpbmdjZW50cmFsLmNvbS9yZXN0YXBpL29hdXRoL3Rva2VuIiwic3ViIjoiMjA2OTkwOTAxOSIsImlzcyI6Imh0dHBzOi8vcGxhdGZvcm0ucmluZ2NlbnRyYWwuY29tIiwiZXhwIjozOTAzNTU1NDI2LCJpYXQiOjE3NTYwNzE3NzksImp0aSI6IjJTakJ5RHdEVFBxTmV1Z29YTXFBTkEifQ.F-x5a96MVJ4zbrHtd1RKEvRQHxxo6L8YnPwQWAVSWJGEE0XgLF9_vNgx8nde-8v3hRi_vJeruJrz-4o7R-rO1A0bzldezRiutfqs2xB_WmbUppnk0I4QKe3faE3t8WJx8XoInPezfymxbM96MA7pPGM82eJo2LpKCPSyCGmDBmYx7eIxcHCTqF48E5zu8UpTQgHcMxA9mMUx8b5iKdyG2ofQHiwSM7T1eK9_CcOI60Kq7D6TACOZwcr_p1xGrHu4F4wgclnF7cPTKbfsJku8OKb5cRjdISMyiCZJpScsJLFZ6WTCaT_qBADE3_Rharnn0_lWakbfkOdfSJgySjMoxA")
+        "jwt_token": os.getenv("RINGCENTRAL_JWT_TOKEN", "eyJraWQiOiI4NzYyZjU5OGQwNTk0NGRiODZiZjVjYTk3ODA0NzYwOCIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJhdWQiOiJodHRwczovL3BsYXRmb3JtLnJpbmdjZW50cmFsLmNvbS9yZXN0YXBpL29hdXRoL3Rva2VuIiwic3ViIjoiMjA2OTkwOTAxOSIsImlzcyI6Imh0dHBzOi8vcGxhdGZvcm0ucmluZ2NlbnRyYWwuY29tIiwiZXhwIjozOTAzNjE5OTIzLCJpYXQiOjE3NTYxMzYyNzYsImp0aSI6Ijk4a05MVXpwUWM2NTYxSmtidUJCZ1EifQ.YAVdVIkTKure78xyiHHdUn1qohebJ-C-bOJpWb9cW48583iRj8seadrUl2pi9GcdMonB3T4sat5E0m6X3lj3ivYq3yGJhgLX5-ZBXCpuYs7AlYcBw_lHhF896T8FNhlSUUxxoy2aHIAH-Dcl1YpryZn_bWXJPHfTR6Q2EK7e3oZgSQF04AuMSu-KDjgoaQzU37rhkZEXKRVzc23f-_ZHiI7c_0fIT7_OnaDiWSepEwKgrx_qZh69xf7kba16LkBM4cVM0kPOT5FcFreUrvRaRDvHNl9dztyFBrUcH1btSvNkm6urvP1U6WFrJqsJAvjsd9Oq_VyQomGD0X8OswTMjA"),
+        "auth_method": os.getenv("RINGCENTRAL_AUTH_METHOD", "jwt")
     }
     
     # Webhook Server Configuration
