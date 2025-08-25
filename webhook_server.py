@@ -8,6 +8,7 @@ import json
 import asyncio
 import hmac
 import hashlib
+import base64
 from datetime import datetime
 from typing import Dict, Any, Optional
 from flask import Flask, request, jsonify, Response
@@ -58,61 +59,72 @@ def health_check():
         logger.error(f"Health check failed: {e}")
         return jsonify({"status": "unhealthy", "error": str(e)}), 500
 
-@app.route('/webhook', methods=['POST'])
+@app.route('/webhook', methods=['GET', 'POST'])
 def ringcentral_webhook():
     """
     Основной endpoint для RingCentral webhook событий
     
-    Обрабатывает:
-    - Validation token при установке webhook
-    - telephony/sessions события
-    - Входящие звонки
+    GET: Validation для установки webhook
+    POST: Обработка telephony/sessions событий
     """
     try:
-        # Получаем заголовки
-        headers = request.headers
+        if request.method == 'GET':
+            # ✅ Validation происходит через GET запрос с параметром hub.challenge
+            challenge = request.args.get('hub.challenge')
+            if challenge:
+                logger.info(f"Получен validation challenge: {challenge}")
+                return Response(challenge, content_type='text/plain')
+            else:
+                logger.warning("GET запрос без hub.challenge параметра")
+                return jsonify({"error": "Missing hub.challenge"}), 400
         
-        # Проверка validation token
-        validation_token = headers.get('Validation-Token')
-        if validation_token:
-            logger.info("Получен validation token для webhook")
-            # Отвечаем с validation token в заголовке
-            return Response(
-                status=200,
-                headers={'Validation-Token': validation_token}
-            )
-        
-        # Проверка подписи webhook (если настроено)
-        if not _verify_webhook_signature(request):
-            logger.warning("Неверная подпись webhook")
-            return jsonify({"error": "Invalid signature"}), 401
-        
-        # Парсим данные webhook
-        webhook_data = request.get_json()
-        if not webhook_data:
-            logger.error("Нет JSON данных в webhook запросе")
-            return jsonify({"error": "No data received"}), 400
-        
-        logger.info(f"Получено webhook событие: {json.dumps(webhook_data, indent=2)}")
-        
-        # Обрабатываем событие
-        event = webhook_data.get('event', '')
-        body = webhook_data.get('body', {})
-        
-        # Проверяем тип события telephony/sessions
-        if '/telephony/sessions' in event:
-            return _handle_telephony_session(body)
-        else:
-            logger.info(f"Неизвестный тип события: {event}")
-            return jsonify({"status": "received"}), 200
+        elif request.method == 'POST':
+            # Проверка подписи webhook (RingCentral использует X-RC-Signature)
+            if not _verify_webhook_signature(request):
+                logger.warning("Неверная подпись webhook")
+                return jsonify({"error": "Invalid signature"}), 401
             
+            # Парсим данные webhook
+            webhook_data = request.get_json()
+            if not webhook_data:
+                logger.error("Нет JSON данных в webhook запросе")
+                return jsonify({"error": "No data received"}), 400
+            
+            logger.info(f"Получено webhook событие: {json.dumps(webhook_data, indent=2)}")
+            
+            # ✅ Правильная структура RingCentral webhook payload:
+            # {
+            #     "uuid": "...",
+            #     "timestamp": "...",
+            #     "subscriptionId": "...",
+            #     "body": {
+            #         "telephonySessionId": "...",
+            #         "parties": [...]
+            #     }
+            # }
+            
+            # Извлекаем body из webhook payload
+            body = webhook_data.get('body', {})
+            
+            # ✅ Проверяем наличие telephonySessionId для telephony событий
+            if body.get('telephonySessionId'):
+                return _handle_telephony_session(body)
+            else:
+                logger.info(f"Не telephony событие: {webhook_data.get('uuid', 'unknown')}")
+                return jsonify({"status": "received"}), 200
+                
     except Exception as e:
         logger.error(f"Ошибка обработки webhook: {e}")
         return jsonify({"error": str(e)}), 500
 
 def _verify_webhook_signature(request) -> bool:
     """
-    Проверка подписи webhook от RingCentral
+    ✅ Правильная проверка подписи webhook от RingCentral
+    
+    RingCentral использует:
+    - Заголовок: X-RC-Signature
+    - Алгоритм: HMAC-SHA1
+    - Кодировка: Base64
     
     Args:
         request: Flask request объект
@@ -120,10 +132,11 @@ def _verify_webhook_signature(request) -> bool:
     Returns:
         bool: True если подпись валидна
     """
-    # Получаем подпись из заголовка
-    signature = request.headers.get('X-Signature')
+    # Получаем подпись из заголовка RingCentral
+    signature = request.headers.get('X-RC-Signature')
     if not signature:
-        # Если подпись не требуется
+        # Если подпись не требуется или не настроена
+        logger.info("Подпись webhook не найдена, пропускаем проверку")
         return True
     
     # Получаем секрет из конфигурации
@@ -132,23 +145,30 @@ def _verify_webhook_signature(request) -> bool:
         logger.warning("Webhook secret не настроен")
         return True
     
-    # Вычисляем ожидаемую подпись
-    body = request.get_data()
-    expected_signature = hmac.new(
-        webhook_secret.encode('utf-8'),
-        body,
-        hashlib.sha256
-    ).hexdigest()
-    
-    # Сравниваем подписи
-    return hmac.compare_digest(signature, expected_signature)
+    try:
+        # ✅ Правильная HMAC проверка для RingCentral
+        body = request.get_data()
+        expected = base64.b64encode(
+            hmac.new(
+                webhook_secret.encode('utf-8'), 
+                body, 
+                hashlib.sha1
+            ).digest()
+        ).decode()
+        
+        # Безопасное сравнение подписей
+        return hmac.compare_digest(signature, expected)
+        
+    except Exception as e:
+        logger.error(f"Ошибка проверки подписи: {e}")
+        return False
 
 def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
     """
     Обработка telephony/sessions событий
     
     Args:
-        session_data: Данные телефонной сессии
+        session_data: Данные телефонной сессии из body
         
     Returns:
         Response: Flask ответ
@@ -388,11 +408,11 @@ async def _create_webhook_subscription():
             '/restapi/v1.0/account/~/extension/~/telephony/sessions'
         ]
         
-        # Настройки доставки webhook
+        # ✅ Рекомендуемая структура delivery_mode для RingCentral
         delivery_mode = {
             'transportType': 'WebHook',
             'address': Config.RINGCENTRAL['webhook_url'],
-            'verificationToken': Config.RINGCENTRAL.get('webhook_secret', '')
+            'encryption': False  # Или True с encryptionKey если нужна шифрация
         }
         
         logger.info(f"Создаем webhook подписку на {Config.RINGCENTRAL['webhook_url']}")

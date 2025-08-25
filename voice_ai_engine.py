@@ -105,7 +105,10 @@ class VoiceAIEngine:
             call_id=call_id,
             phone_number=phone_number,
             start_time=datetime.now(),
-            state=CallState.RINGING
+            state=CallState.RINGING,
+            conversation_history=[],
+            audio_buffer=b"",
+            last_activity=datetime.now()
         )
         
         with self.call_lock:
