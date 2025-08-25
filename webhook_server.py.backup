@@ -15,7 +15,6 @@ from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import threading
 import time
-from functools import wraps
 
 from voice_ai_engine import voice_ai_engine
 from config import Config
@@ -37,60 +36,10 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-# Настройка логирования для Flask
-app.logger.setLevel(logging.DEBUG)
-
-# Добавляем middleware для логирования всех запросов
-@app.before_request
-def log_request_info():
-    """Логируем информацию о каждом запросе"""
-    logger.debug('=' * 80)
-    logger.debug(f'Request: {request.method} {request.url}')
-    logger.debug(f'Headers: {dict(request.headers)}')
-    logger.debug(f'Content-Type: {request.content_type}')
-    logger.debug(f'Content-Length: {request.content_length}')
-    if request.method in ['POST', 'PUT', 'PATCH']:
-        # Логируем первые 1000 символов тела запроса
-        data = request.get_data(as_text=True)
-        if data:
-            logger.debug(f'Body (first 1000 chars): {data[:1000]}')
-        else:
-            logger.debug('Body: <empty>')
-    logger.debug('=' * 80)
-
-@app.after_request
-def log_response_info(response):
-    """Логируем информацию о каждом ответе"""
-    logger.debug(f'Response: {response.status}')
-    return response
-
 # Глобальные переменные
 active_calls = {}
 call_lock = threading.Lock()
 subscription_id = None
-
-def disable_auto_json_parsing(f):
-    """
-    Декоратор для отключения автоматического парсинга JSON
-    Flask автоматически парсит JSON когда Content-Type: application/json
-    Этот декоратор позволяет обработать запрос вручную
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Сохраняем оригинальный метод get_json
-        original_get_json = request.get_json
-        
-        # Переопределяем get_json чтобы он возвращал None
-        request.get_json = lambda *args, **kwargs: None
-        
-        try:
-            result = f(*args, **kwargs)
-        finally:
-            # Восстанавливаем оригинальный метод
-            request.get_json = original_get_json
-        
-        return result
-    return decorated_function
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -122,49 +71,29 @@ def webhook_test():
     return jsonify({"status": "ok", "message": "Webhook is working"}), 200
 
 @app.route('/webhook', methods=['GET', 'POST'])
-@disable_auto_json_parsing
 def ringcentral_webhook():
-    """
-    Обработчик webhook от RingCentral
-    
-    GET: Валидация подписки с hub.challenge
-    POST: Обработка webhook событий
-    """
-    # Обработка GET запросов для валидации
-    if request.method == 'GET':
-        challenge = request.args.get('hub.challenge')
-        if challenge:
-            logger.info(f"Получен validation challenge: {challenge}")
-            return Response(challenge, content_type='text/plain')
-        else:
-            logger.warning("GET запрос без hub.challenge параметра")
-            return jsonify({"error": "Missing hub.challenge"}), 400
-    
-    # Обработка POST запросов
-    elif request.method == 'POST':
-        # Логируем заголовки для отладки
-        logger.debug(f"Headers: {dict(request.headers)}")
-        
-        # Получаем сырые данные
-        raw_data = request.get_data()
-        
+    # Отключаем автоматический парсинг JSON для этого endpoint
+    if request.method == 'POST':
         # Проверяем есть ли данные
-        if not raw_data:
+        if not request.get_data():
             logger.info("Получен пустой POST запрос для валидации webhook")
             return jsonify({"status": "ok"}), 200
         
-        # Проверка подписи webhook (делаем до парсинга JSON)
+        # Если есть данные, обрабатываем их вручную
+        try:
+            raw_data = request.get_data(as_text=True)
+            if raw_data:
+                webhook_data = json.loads(raw_data)
+            else:
+                return jsonify({"status": "ok"}), 200
+        except json.JSONDecodeError:
+            logger.error("Ошибка парсинга JSON данных")
+            return jsonify({"error": "Invalid JSON"}), 400
+        
+        # Проверка подписи webhook
         if not _verify_webhook_signature(request):
             logger.warning("Неверная подпись webhook")
             return jsonify({"error": "Invalid signature"}), 401
-        
-        # Пытаемся распарсить JSON
-        try:
-            webhook_data = json.loads(raw_data.decode('utf-8'))
-        except json.JSONDecodeError as e:
-            logger.error(f"Ошибка парсинга JSON данных: {e}")
-            logger.error(f"Raw data: {raw_data[:500]}")  # Логируем первые 500 символов
-            return jsonify({"error": "Invalid JSON"}), 400
         
         logger.info(f"Получено webhook событие: {json.dumps(webhook_data, indent=2)}")
         
@@ -177,6 +106,15 @@ def ringcentral_webhook():
         else:
             logger.info(f"Не telephony событие: {webhook_data.get('uuid', 'unknown')}")
             return jsonify({"status": "received"}), 200
+        # Обработка GET запросов для валидации
+        if request.method == 'GET':
+            challenge = request.args.get('hub.challenge')
+            if challenge:
+                logger.info(f"Получен validation challenge: {challenge}")
+                return Response(challenge, content_type='text/plain')
+            else:
+                logger.warning("GET запрос без hub.challenge параметра")
+                return jsonify({"error": "Missing hub.challenge"}), 400
 
 def _verify_webhook_signature(request) -> bool:
     """
@@ -191,19 +129,19 @@ def _verify_webhook_signature(request) -> bool:
         request: Flask request объект
         
     Returns:
-        bool: True если подпись валидна или не требуется
+        bool: True если подпись валидна
     """
     # Получаем подпись из заголовка RingCentral
     signature = request.headers.get('X-RC-Signature')
     if not signature:
         # Если подпись не требуется или не настроена
-        logger.debug("Подпись webhook не найдена, пропускаем проверку")
+        logger.info("Подпись webhook не найдена, пропускаем проверку")
         return True
     
     # Получаем секрет из конфигурации
     webhook_secret = Config.RINGCENTRAL.get('webhook_secret')
     if not webhook_secret:
-        logger.debug("Webhook secret не настроен, пропускаем проверку подписи")
+        logger.warning("Webhook secret не настроен")
         return True
     
     try:
@@ -218,14 +156,7 @@ def _verify_webhook_signature(request) -> bool:
         ).decode()
         
         # Безопасное сравнение подписей
-        is_valid = hmac.compare_digest(signature, expected)
-        
-        if is_valid:
-            logger.debug("Подпись webhook валидна")
-        else:
-            logger.warning(f"Неверная подпись webhook. Ожидалось: {expected[:10]}..., получено: {signature[:10]}...")
-            
-        return is_valid
+        return hmac.compare_digest(signature, expected)
         
     except Exception as e:
         logger.error(f"Ошибка проверки подписи: {e}")
