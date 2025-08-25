@@ -342,10 +342,10 @@ async def _answer_and_process_call(call_data: Dict[str, Any]):
             logger.info(f"Успешно ответили на звонок {call_data['callId']}")
         except Exception as e:
             logger.error(f"Ошибка при ответе на звонок: {e}")
-            
-            # Передаем звонок в Voice AI Engine для обработки
-            response = await voice_ai_engine.handle_incoming_call(call_data)
-            logger.info(f"Voice AI обработал звонок: {response}")
+        
+        # Передаем звонок в Voice AI Engine для обработки (выполняется всегда)
+        response = await voice_ai_engine.handle_incoming_call(call_data)
+        logger.info(f"Voice AI обработал звонок: {response}")
             
     except Exception as e:
         logger.error(f"Ошибка при ответе на звонок: {e}")
