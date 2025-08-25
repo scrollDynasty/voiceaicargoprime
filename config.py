@@ -17,12 +17,10 @@ class Config:
         "client_id": os.getenv("RINGCENTRAL_CLIENT_ID", "dxyRUshmpEBeycpG7qfdti"),
         "client_secret": os.getenv("RINGCENTRAL_CLIENT_SECRET", "8eviWNljyqecloFZ5F18jT9MKfuXpxLTPcukwUvuh3j2"),
         "server": os.getenv("RINGCENTRAL_SERVER", "https://platform.ringcentral.com"),
-        "username": os.getenv("RINGCENTRAL_USERNAME", "Primecargo07@gmail.com"),
-        "password": os.getenv("RINGCENTRAL_PASSWORD", "Pcl2024$!"),
         "main_number": os.getenv("RINGCENTRAL_MAIN_NUMBER", "(513) 572-5833"),
-        "webhook_url": os.getenv("WEBHOOK_URL", "https://301849761dd5.ngrok-free.app/webhook"), 
-        "webhook_secret": os.getenv("WEBHOOK_SECRET", "c828fad557ae2bb7e6ea8488b5a764124e1c7d619187b46f80d83a7541ea0f6a"),
-        "jwt_token": os.getenv("RINGCENTRAL_JWT_TOKEN", "eyJraWQiOiI4NzYyZjU5OGQwNTk0NGRiODZiZjVjYTk3ODA0NzYwOCIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJhdWQiOiJodHRwczovL3BsYXRmb3JtLnJpbmdjZW50cmFsLmNvbS9yZXN0YXBpL29hdXRoL3Rva2VuIiwic3ViIjoiMjA2OTkwOTAxOSIsImlzcyI6Imh0dHBzOi8vcGxhdGZvcm0ucmluZ2NlbnRyYWwuY29tIiwiZXhwIjozOTAzNjE5OTIzLCJpYXQiOjE3NTYxMzYyNzYsImp0aSI6Ijk4a05MVXpwUWM2NTYxSmtidUJCZ1EifQ.YAVdVIkTKure78xyiHHdUn1qohebJ-C-bOJpWb9cW48583iRj8seadrUl2pi9GcdMonB3T4sat5E0m6X3lj3ivYq3yGJhgLX5-ZBXCpuYs7AlYcBw_lHhF896T8FNhlSUUxxoy2aHIAH-Dcl1YpryZn_bWXJPHfTR6Q2EK7e3oZgSQF04AuMSu-KDjgoaQzU37rhkZEXKRVzc23f-_ZHiI7c_0fIT7_OnaDiWSepEwKgrx_qZh69xf7kba16LkBM4cVM0kPOT5FcFreUrvRaRDvHNl9dztyFBrUcH1btSvNkm6urvP1U6WFrJqsJAvjsd9Oq_VyQomGD0X8OswTMjA"),
+        "webhook_url": os.getenv("WEBHOOK_URL", "https://9a98681efc42.ngrok-free.app/webhook"), 
+        "webhook_secret": os.getenv("WEBHOOK_SECRET", "DGs0Eus90lBVcCZgFbLmWP2ZIR6m9Pbu"),
+        "jwt_token": os.getenv("RINGCENTRAL_JWT_TOKEN", "eyJraWQiOiI4NzYyZjU5OGQwNTk0NGRiODZiZjVjYTk3ODA0NzYwOCIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJhdWQiOiJodHRwczovL3BsYXRmb3JtLnJpbmdjZW50cmFsLmNvbS9yZXN0YXBpL29hdXRoL3Rva2VuIiwic3ViIjoiMjA2OTkwOTAxOSIsImlzcyI6Imh0dHBzOi8vcGxhdGZvcm0ucmluZ2NlbnRyYWwuY29tIiwiZXhwIjoxNzU2Njg0Nzk5LCJpYXQiOjE3NTYxNTI2MTUsImp0aSI6IkZLX3hvcmpRVFE2LWlnR2dGQVlOdHcifQ.cvPyRYZEc7tSCY4yFYHdbhHioNqJRIBqu4HyqPTbmC6M1uUeOn22n-MOjAt9LtFLytHnKTeoNDDBUyx0F8FBwgEYMyXbgxNZhntPVTvP1W7bp9ICzOgqpaXf7sbb-jZmwwHI__7zw8YPJylaiIQFvh6DmmyMWx_iIr_ykg7e2GblxxBPp8bxhAYVYm7R7FKGEzscIn-HvXobERYdLDb1KVVmT3aA_LySC2DvFZqIDZEZA31zx2KzZLNJ8SfCNRPknSJnw-JUSiExF8mitVHwGW4-zQiUpf-0PaFgc0KY9e1vU2ADHF2Cxmy9B4pHTIGr9EJGetNI0eihREqZEozwUQ"),
         "auth_method": os.getenv("RINGCENTRAL_AUTH_METHOD", "jwt")
     }
     
@@ -48,9 +46,9 @@ class Config:
     TTS = {
         "model_name": os.getenv("TTS_MODEL", "tts_models/en/vctk/vits"),  # Более качественная модель
         "device": os.getenv("TTS_DEVICE", "cuda" if os.getenv("USE_GPU", "True").lower() == "true" else "cpu"),
-        "speaker": "p225",  # Женский голос, звучит более естественно
-        "speed": 0.9,  # Немного медленнее для лучшего понимания
-        "volume": 1.0,
+        "speaker": "p227",  # Дружелюбная и теплая женская диспетчер
+        "speed": 1.15,  # Быстро и энергично как в тесте
+        "volume": 1.2,  # Громко и позитивно
         "sample_rate": 22050,  # Высокое качество
         "use_phonemes": True,  # Использовать фонемы для лучшего произношения
         # Альтернативные модели для лучшего качества:

@@ -18,7 +18,7 @@ import time
 
 from voice_ai_engine import voice_ai_engine
 from config import Config
-from ringcentral_client import get_ringcentral_platform
+from ringcentral_auth import make_request
 
 # Настройка логирования
 logging.basicConfig(
@@ -39,7 +39,6 @@ CORS(app)
 # Глобальные переменные
 active_calls = {}
 call_lock = threading.Lock()
-ringcentral_platform = None
 subscription_id = None
 
 @app.route('/health', methods=['GET'])
@@ -49,7 +48,7 @@ def health_check():
         health_data = {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
-            "ringcentral_connected": ringcentral_platform is not None and ringcentral_platform.logged_in(),
+            "ringcentral_connected": subscription_id is not None,
             "subscription_active": subscription_id is not None,
             "active_calls": len(active_calls),
             "voice_ai_status": voice_ai_engine.health_check()
@@ -256,22 +255,18 @@ async def _answer_and_process_call(call_data: Dict[str, Any]):
         party_id = call_data['partyId']
         
         # Отвечаем на звонок через RingCentral API
-        if ringcentral_platform:
-            try:
-                ringcentral_platform.post(
-                    f'/account/~/extension/~/telephony/sessions/{telephony_session_id}/parties/{party_id}/answer'
-                )
-                logger.info(f"Успешно ответили на звонок {call_data['callId']}")
-            except Exception as e:
-                logger.error(f"Ошибка при ответе на звонок: {e}")
-                
-                # Передаем звонок в Voice AI Engine для обработки
-                response = await voice_ai_engine.handle_incoming_call(call_data)
-                logger.info(f"Voice AI обработал звонок: {response}")
-            else:
-                logger.error(f"Не удалось ответить на звонок {call_data['callId']}")
-        else:
-            logger.error("RingCentral клиент не инициализирован")
+        try:
+            make_request(
+                'POST',
+                f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{telephony_session_id}/parties/{party_id}/answer'
+            )
+            logger.info(f"Успешно ответили на звонок {call_data['callId']}")
+        except Exception as e:
+            logger.error(f"Ошибка при ответе на звонок: {e}")
+            
+            # Передаем звонок в Voice AI Engine для обработки
+            response = await voice_ai_engine.handle_incoming_call(call_data)
+            logger.info(f"Voice AI обработал звонок: {response}")
             
     except Exception as e:
         logger.error(f"Ошибка при ответе на звонок: {e}")
@@ -316,24 +311,23 @@ def transfer_call(call_id: str):
         if not call_data:
             return jsonify({"error": "Call not found"}), 404
         
-        # Переводим звонок
-        async def do_transfer():
-            success = await ringcentral_platform.transfer_call(
-                call_data['telephonySessionId'],
-                call_data['partyId'],
-                transfer_to,
-                transfer_type
+        # Переводим звонок через RingCentral API
+        try:
+            transfer_data = {
+                "phoneNumber": transfer_to,
+                "transferType": transfer_type
+            }
+            
+            make_request(
+                'POST',
+                f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{call_data["telephonySessionId"]}/parties/{call_data["partyId"]}/transfer',
+                transfer_data
             )
-            return success
-        
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        success = loop.run_until_complete(do_transfer())
-        loop.close()
-        
-        if success:
+            
             return jsonify({"status": "transferred"}), 200
-        else:
+            
+        except Exception as e:
+            logger.error(f"Ошибка перевода звонка: {e}")
             return jsonify({"error": "Transfer failed"}), 500
             
     except Exception as e:
@@ -351,26 +345,21 @@ def hangup_call(call_id: str):
         if not call_data:
             return jsonify({"error": "Call not found"}), 404
         
-        # Завершаем звонок
-        async def do_hangup():
-            success = await ringcentral_platform.hangup_call(
-                call_data['telephonySessionId'],
-                call_data['partyId']
+        # Завершаем звонок через RingCentral API
+        try:
+            make_ringcentral_request(
+                'DELETE',
+                f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{call_data["telephonySessionId"]}/parties/{call_data["partyId"]}'
             )
-            return success
-        
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        success = loop.run_until_complete(do_hangup())
-        loop.close()
-        
-        if success:
+            
             # Удаляем из активных звонков
             with call_lock:
                 if call_id in active_calls:
                     del active_calls[call_id]
             return jsonify({"status": "hangup"}), 200
-        else:
+            
+        except Exception as e:
+            logger.error(f"Ошибка завершения звонка: {e}")
             return jsonify({"error": "Hangup failed"}), 500
             
     except Exception as e:
@@ -381,9 +370,6 @@ def hangup_call(call_id: str):
 def create_subscription():
     """Создать webhook подписку вручную"""
     try:
-        if not ringcentral_platform:
-            return jsonify({"error": "RingCentral client not initialized"}), 500
-        
         # Создаем подписку
         async def do_create_subscription():
             return await _create_webhook_subscription()
@@ -428,9 +414,9 @@ async def _create_webhook_subscription():
             'expiresIn': 86400  # 24 часа
         }
         
-        # Создаем подписку через platform
-        response = ringcentral_platform.post('/subscription', subscription_data)
-        subscription_info = response.json()
+        # Создаем подписку через прямой API вызов
+        from ringcentral_client import make_ringcentral_request
+        subscription_info = make_ringcentral_request('POST', '/restapi/v1.0/subscription', subscription_data)
         
         logger.info(f"Webhook подписка создана: {subscription_info['id']}")
         return subscription_info
@@ -441,14 +427,21 @@ async def _create_webhook_subscription():
 
 async def initialize_ringcentral():
     """Инициализация RingCentral и создание подписки"""
-    global ringcentral_platform, subscription_id
+    global subscription_id
     
     try:
         logger.info("🚀 Starting Voice AI System...")
         
-        # Инициализация RingCentral (только один раз)
-        ringcentral_platform = get_ringcentral_platform()
-        logger.info("📞 RingCentral platform ready")
+        # Инициализация RingCentral JWT клиента
+        from ringcentral_client import get_ringcentral_client, test_ringcentral_connection
+        client = get_ringcentral_client()
+        logger.info("📞 RingCentral JWT client ready")
+        
+        # Тестируем соединение
+        if test_ringcentral_connection():
+            logger.info("✅ RingCentral connection test passed")
+        else:
+            logger.warning("⚠️ RingCentral connection test failed")
         
         # Создаем webhook подписку
         subscription_info = await _create_webhook_subscription()
