@@ -264,9 +264,12 @@ def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
             status = party.get('status', {})
             party_id = party.get('id')
             
-            # Проверяем входящий звонок в состоянии "Proceeding"
-            if direction == 'Inbound' and status.get('code') == 'Proceeding':
-                logger.info(f"Обнаружен входящий звонок: session={telephony_session_id}, party={party_id}")
+            logger.info(f"Обрабатываем party: direction={direction}, status={status}, party_id={party_id}")
+            
+            # Проверяем входящий звонок в состояниях "Proceeding", "Setup" или "Alerting"
+            incoming_statuses = ['Proceeding', 'Setup', 'Alerting', 'Ringing']
+            if direction == 'Inbound' and status.get('code') in incoming_statuses:
+                logger.info(f"🔔 Обнаружен входящий звонок: session={telephony_session_id}, party={party_id}, status={status.get('code')}")
                 
                 # Подготавливаем данные звонка
                 call_data = {
@@ -280,6 +283,8 @@ def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
                     "timestamp": datetime.now().isoformat()
                 }
                 
+                logger.info(f"📞 Подготовлены данные звонка: {call_data}")
+                
                 # Сохраняем информацию о звонке
                 with call_lock:
                     active_calls[call_data["callId"]] = call_data
@@ -289,12 +294,15 @@ def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
+                        logger.info(f"🚀 Запускаем автоматический ответ на звонок {call_data['callId']}")
                         # Автоматически отвечаем на звонок
                         loop.run_until_complete(
                             _answer_and_process_call(call_data)
                         )
                     except Exception as e:
-                        logger.error(f"Ошибка обработки входящего звонка: {e}")
+                        logger.error(f"❌ Ошибка обработки входящего звонка: {e}")
+                        import traceback
+                        logger.error(f"Traceback: {traceback.format_exc()}")
                     finally:
                         loop.close()
                 
@@ -302,19 +310,23 @@ def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
                 thread = threading.Thread(target=process_incoming_call)
                 thread.daemon = True
                 thread.start()
+                logger.info(f"📋 Запущен фоновый поток для обработки звонка {call_data['callId']}")
+            else:
+                if direction == 'Inbound':
+                    logger.info(f"⏭️ Пропускаем входящий звонок со статусом {status.get('code')} (не подходит для ответа)")
                 
-            # Обрабатываем изменения статуса
-            elif party_id:
-                call_id = f"{telephony_session_id}_{party_id}"
-                with call_lock:
-                    if call_id in active_calls:
-                        active_calls[call_id]["status"] = status
-                        active_calls[call_id]["last_update"] = datetime.now().isoformat()
-                        
-                        # Если звонок завершен, удаляем из активных
-                        if status.get('code') in ['Disconnected', 'Gone']:
-                            logger.info(f"Звонок {call_id} завершен")
-                            del active_calls[call_id]
+                # Обрабатываем изменения статуса для существующих звонков
+                if party_id:
+                    call_id = f"{telephony_session_id}_{party_id}"
+                    with call_lock:
+                        if call_id in active_calls:
+                            active_calls[call_id]["status"] = status
+                            active_calls[call_id]["last_update"] = datetime.now().isoformat()
+                            
+                            # Если звонок завершен, удаляем из активных
+                            if status.get('code') in ['Disconnected', 'Gone']:
+                                logger.info(f"Звонок {call_id} завершен")
+                                del active_calls[call_id]
         
         return jsonify({"status": "processed"}), 200
         
@@ -332,23 +344,42 @@ async def _answer_and_process_call(call_data: Dict[str, Any]):
     try:
         telephony_session_id = call_data['telephonySessionId']
         party_id = call_data['partyId']
+        call_id = call_data['callId']
+        
+        logger.info(f"📞 Начинаем ответ на звонок {call_id}")
+        logger.info(f"🔗 Session: {telephony_session_id}, Party: {party_id}")
         
         # Отвечаем на звонок через RingCentral API
         try:
-            make_request(
+            logger.info(f"🔄 Отправляем запрос на ответ для звонка {call_id}")
+            answer_response = make_request(
                 'POST',
                 f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{telephony_session_id}/parties/{party_id}/answer'
             )
-            logger.info(f"Успешно ответили на звонок {call_data['callId']}")
+            logger.info(f"✅ Успешно ответили на звонок {call_id}")
+            logger.info(f"📋 Ответ API: {answer_response}")
         except Exception as e:
-            logger.error(f"Ошибка при ответе на звонок: {e}")
+            logger.error(f"❌ Ошибка при ответе на звонок {call_id}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        # Небольшая задержка перед запуском Voice AI
+        await asyncio.sleep(1)
         
         # Передаем звонок в Voice AI Engine для обработки (выполняется всегда)
-        response = await voice_ai_engine.handle_incoming_call(call_data)
-        logger.info(f"Voice AI обработал звонок: {response}")
+        logger.info(f"🤖 Запускаем Voice AI для звонка {call_id}")
+        try:
+            response = await voice_ai_engine.handle_incoming_call(call_data)
+            logger.info(f"✅ Voice AI обработал звонок {call_id}: {response}")
+        except Exception as e:
+            logger.error(f"❌ Ошибка Voice AI для звонка {call_id}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             
     except Exception as e:
-        logger.error(f"Ошибка при ответе на звонок: {e}")
+        logger.error(f"❌ Общая ошибка при ответе на звонок: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
 
 @app.route('/calls', methods=['GET'])
 def get_active_calls():
