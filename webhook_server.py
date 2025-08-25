@@ -11,7 +11,7 @@ import hashlib
 import base64
 from datetime import datetime
 from typing import Dict, Any, Optional
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, make_response
 from flask_cors import CORS
 import threading
 import time
@@ -151,7 +151,17 @@ def ringcentral_webhook():
         # Проверяем есть ли данные
         if not raw_data:
             logger.info("Получен пустой POST запрос для валидации webhook")
-            return jsonify({"status": "ok"}), 200
+            
+            # Проверяем наличие Validation-Token в заголовках
+            validation_token = request.headers.get('Validation-Token')
+            if validation_token:
+                logger.info(f"Возвращаем Validation-Token: {validation_token}")
+                # Создаем ответ с заголовком Validation-Token
+                response = make_response(jsonify({"status": "ok"}), 200)
+                response.headers['Validation-Token'] = validation_token
+                return response
+            else:
+                return jsonify({"status": "ok"}), 200
         
         # Проверка подписи webhook (делаем до парсинга JSON)
         if not _verify_webhook_signature(request):
