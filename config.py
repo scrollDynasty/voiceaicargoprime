@@ -14,13 +14,13 @@ class Config:
     
     # RingCentral API Configuration
     RINGCENTRAL = {
-        "client_id": os.getenv("RINGCENTRAL_CLIENT_ID", "dxyRUshmpEBeycpG7qfdti"),
-        "client_secret": os.getenv("RINGCENTRAL_CLIENT_SECRET", "8eviWNljyqecloFZ5F18jT9MKfuXpxLTPcukwUvuh3j2"),
+        "client_id": os.getenv("RINGCENTRAL_CLIENT_ID", "bXCZ510zNmybxAUXGIZruT"),
+        "client_secret": os.getenv("RINGCENTRAL_CLIENT_SECRET", "10hW9ccNfhyc1y69bQzdgnVUnFyf76B6qcmwOtypEGo7"),
         "server": os.getenv("RINGCENTRAL_SERVER", "https://platform.ringcentral.com"),
         "main_number": os.getenv("RINGCENTRAL_MAIN_NUMBER", "(513) 572-5833"),
-        "webhook_url": os.getenv("WEBHOOK_URL", "https://9a98681efc42.ngrok-free.app/webhook"), 
-        "webhook_secret": os.getenv("WEBHOOK_SECRET", "DGs0Eus90lBVcCZgFbLmWP2ZIR6m9Pbu"),
-        "jwt_token": os.getenv("RINGCENTRAL_JWT_TOKEN", "eyJraWQiOiI4NzYyZjU5OGQwNTk0NGRiODZiZjVjYTk3ODA0NzYwOCIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJhdWQiOiJodHRwczovL3BsYXRmb3JtLnJpbmdjZW50cmFsLmNvbS9yZXN0YXBpL29hdXRoL3Rva2VuIiwic3ViIjoiMjA2OTkwOTAxOSIsImlzcyI6Imh0dHBzOi8vcGxhdGZvcm0ucmluZ2NlbnRyYWwuY29tIiwiZXhwIjoxNzU2Njg0Nzk5LCJpYXQiOjE3NTYxNTI2MTUsImp0aSI6IkZLX3hvcmpRVFE2LWlnR2dGQVlOdHcifQ.cvPyRYZEc7tSCY4yFYHdbhHioNqJRIBqu4HyqPTbmC6M1uUeOn22n-MOjAt9LtFLytHnKTeoNDDBUyx0F8FBwgEYMyXbgxNZhntPVTvP1W7bp9ICzOgqpaXf7sbb-jZmwwHI__7zw8YPJylaiIQFvh6DmmyMWx_iIr_ykg7e2GblxxBPp8bxhAYVYm7R7FKGEzscIn-HvXobERYdLDb1KVVmT3aA_LySC2DvFZqIDZEZA31zx2KzZLNJ8SfCNRPknSJnw-JUSiExF8mitVHwGW4-zQiUpf-0PaFgc0KY9e1vU2ADHF2Cxmy9B4pHTIGr9EJGetNI0eihREqZEozwUQ"),
+        "webhook_url": os.getenv("WEBHOOK_URL", "https://d8a5d385cf35.ngrok-free.app/webhook"), 
+        "webhook_secret": os.getenv("WEBHOOK_SECRET", "1Z7ztKD0I1gBu1QscmOBkonCn1tXG7LN"),
+        "jwt_token": os.getenv("RINGCENTRAL_JWT_TOKEN", "eyJraWQiOiI4NzYyZjU5OGQwNTk0NGRiODZiZjVjYTk3ODA0NzYwOCIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJhdWQiOiJodHRwczovL3BsYXRmb3JtLnJpbmdjZW50cmFsLmNvbS9yZXN0YXBpL29hdXRoL3Rva2VuIiwic3ViIjoiMjA2OTkwOTAxOSIsImlzcyI6Imh0dHBzOi8vcGxhdGZvcm0ucmluZ2NlbnRyYWwuY29tIiwiZXhwIjoxNzU2Njg0Nzk5LCJpYXQiOjE3NTYxNTgwMjMsImp0aSI6IjB4QWl2MXA1UllxcnhqU0pXY0p2bVEifQ.XNNMUCudjRHdGAYjpPZ8neF5w1u7HEVC-Nl652sfBRY7PcMTJjRlT1jxJ59Gsu37Eg9gQpyhIH1moPBaNzPe_qu56xps6HVSRbKjcWErAm-kGFZEDE5D8llNj2R7d32H3RpFhrKRZr91yLMCiElTPCWHtajx47cuoEpxuPxWX4GVKSOxTjG0scDKmtxnHfAW9KTMXR48o5z3fSaUNcI_mI0JPvelVf7UcJBjpU-_oo6GajBA1Gncjewiuv2-b_E6iSWKBxImpVfHWEPaXaARLBx61iLUk_wEzeRCokN_Yw6CTn4wxfKfJImM0MLa3jTW3vkSsBXANaKvwyMU8I7sNw"),
         "auth_method": os.getenv("RINGCENTRAL_AUTH_METHOD", "jwt")
     }
     

@@ -58,17 +58,56 @@ def health_check():
         logger.error(f"Health check failed: {e}")
         return jsonify({"status": "unhealthy", "error": str(e)}), 500
 
+@app.route('/webhook/validate', methods=['POST'])
+def webhook_validate():
+    """Endpoint для валидации webhook от RingCentral"""
+    logger.info("Получен запрос валидации webhook")
+    return jsonify({"status": "ok"}), 200
+
+@app.route('/webhook/test', methods=['POST'])
+def webhook_test():
+    """Простой endpoint для тестирования webhook"""
+    logger.info("Получен тестовый POST запрос")
+    return jsonify({"status": "ok", "message": "Webhook is working"}), 200
+
 @app.route('/webhook', methods=['GET', 'POST'])
 def ringcentral_webhook():
-    """
-    Основной endpoint для RingCentral webhook событий
-    
-    GET: Validation для установки webhook
-    POST: Обработка telephony/sessions событий
-    """
-    try:
+    # Отключаем автоматический парсинг JSON для этого endpoint
+    if request.method == 'POST':
+        # Проверяем есть ли данные
+        if not request.get_data():
+            logger.info("Получен пустой POST запрос для валидации webhook")
+            return jsonify({"status": "ok"}), 200
+        
+        # Если есть данные, обрабатываем их вручную
+        try:
+            raw_data = request.get_data(as_text=True)
+            if raw_data:
+                webhook_data = json.loads(raw_data)
+            else:
+                return jsonify({"status": "ok"}), 200
+        except json.JSONDecodeError:
+            logger.error("Ошибка парсинга JSON данных")
+            return jsonify({"error": "Invalid JSON"}), 400
+        
+        # Проверка подписи webhook
+        if not _verify_webhook_signature(request):
+            logger.warning("Неверная подпись webhook")
+            return jsonify({"error": "Invalid signature"}), 401
+        
+        logger.info(f"Получено webhook событие: {json.dumps(webhook_data, indent=2)}")
+        
+        # Извлекаем body из webhook payload
+        body = webhook_data.get('body', {})
+        
+        # Проверяем наличие telephonySessionId для telephony событий
+        if body.get('telephonySessionId'):
+            return _handle_telephony_session(body)
+        else:
+            logger.info(f"Не telephony событие: {webhook_data.get('uuid', 'unknown')}")
+            return jsonify({"status": "received"}), 200
+        # Обработка GET запросов для валидации
         if request.method == 'GET':
-            # ✅ Validation происходит через GET запрос с параметром hub.challenge
             challenge = request.args.get('hub.challenge')
             if challenge:
                 logger.info(f"Получен validation challenge: {challenge}")
@@ -76,45 +115,6 @@ def ringcentral_webhook():
             else:
                 logger.warning("GET запрос без hub.challenge параметра")
                 return jsonify({"error": "Missing hub.challenge"}), 400
-        
-        elif request.method == 'POST':
-            # Проверка подписи webhook (RingCentral использует X-RC-Signature)
-            if not _verify_webhook_signature(request):
-                logger.warning("Неверная подпись webhook")
-                return jsonify({"error": "Invalid signature"}), 401
-            
-            # Парсим данные webhook
-            webhook_data = request.get_json()
-            if not webhook_data:
-                logger.error("Нет JSON данных в webhook запросе")
-                return jsonify({"error": "No data received"}), 400
-            
-            logger.info(f"Получено webhook событие: {json.dumps(webhook_data, indent=2)}")
-            
-            # ✅ Правильная структура RingCentral webhook payload:
-            # {
-            #     "uuid": "...",
-            #     "timestamp": "...",
-            #     "subscriptionId": "...",
-            #     "body": {
-            #         "telephonySessionId": "...",
-            #         "parties": [...]
-            #     }
-            # }
-            
-            # Извлекаем body из webhook payload
-            body = webhook_data.get('body', {})
-            
-            # ✅ Проверяем наличие telephonySessionId для telephony событий
-            if body.get('telephonySessionId'):
-                return _handle_telephony_session(body)
-            else:
-                logger.info(f"Не telephony событие: {webhook_data.get('uuid', 'unknown')}")
-                return jsonify({"status": "received"}), 200
-                
-    except Exception as e:
-        logger.error(f"Ошибка обработки webhook: {e}")
-        return jsonify({"error": str(e)}), 500
 
 def _verify_webhook_signature(request) -> bool:
     """
@@ -414,9 +414,9 @@ async def _create_webhook_subscription():
             'expiresIn': 86400  # 24 часа
         }
         
-        # Создаем подписку через прямой API вызов
-        from ringcentral_client import make_ringcentral_request
-        subscription_info = make_ringcentral_request('POST', '/restapi/v1.0/subscription', subscription_data)
+        # Создаем подписку через новую систему авторизации
+        from ringcentral_auth import make_request
+        subscription_info = make_request('POST', '/restapi/v1.0/subscription', subscription_data)
         
         logger.info(f"Webhook подписка создана: {subscription_info['id']}")
         return subscription_info
@@ -432,13 +432,11 @@ async def initialize_ringcentral():
     try:
         logger.info("🚀 Starting Voice AI System...")
         
-        # Инициализация RingCentral JWT клиента
-        from ringcentral_client import get_ringcentral_client, test_ringcentral_connection
-        client = get_ringcentral_client()
-        logger.info("📞 RingCentral JWT client ready")
-        
-        # Тестируем соединение
-        if test_ringcentral_connection():
+        # Инициализация RingCentral с новой системой авторизации
+        from ringcentral_auth import authenticate, get_auth_status
+        if authenticate():
+            status = get_auth_status()
+            logger.info(f"📞 RingCentral авторизован: {status['auth_method']}")
             logger.info("✅ RingCentral connection test passed")
         else:
             logger.warning("⚠️ RingCentral connection test failed")

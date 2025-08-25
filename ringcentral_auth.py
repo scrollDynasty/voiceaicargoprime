@@ -72,7 +72,7 @@ class RingCentralAuth:
             return False
     
     def _try_jwt_auth(self):
-        """Пробуем JWT авторизацию"""
+        """Пробуем JWT авторизацию согласно официальной документации"""
         try:
             logger.info("🔑 Пробуем JWT авторизацию...")
             
@@ -81,21 +81,45 @@ class RingCentralAuth:
                 logger.warning("⚠️ JWT токен недействителен или истек")
                 return False
             
-            # Тестируем JWT токен
+            # ✅ ПРАВИЛЬНЫЙ JWT FLOW согласно документации:
+            # 1. Обмениваем JWT на access token через OAuth endpoint
+            
+            import base64
+            
+            # Создаем Basic Auth header
+            credentials = f"{self.client_id}:{self.client_secret}"
+            encoded_credentials = base64.b64encode(credentials.encode()).decode()
+            
             headers = {
-                'Authorization': f'Bearer {self.jwt_token}',
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': f'Basic {encoded_credentials}'
             }
             
-            response = requests.get(f"{self.server_url}/restapi/v1.0", headers=headers)
+            data = {
+                'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                'assertion': self.jwt_token
+            }
+            
+            logger.info("🔄 Обмениваем JWT на access token...")
+            response = requests.post(
+                f"{self.server_url}/restapi/oauth/token",
+                headers=headers,
+                data=data
+            )
             
             if response.status_code == 200:
-                self.access_token = self.jwt_token
+                token_data = response.json()
+                self.access_token = token_data['access_token']
+                self.refresh_token = token_data.get('refresh_token')
+                self.token_expires_at = time.time() + token_data['expires_in']
                 self.is_authenticated = True
-                logger.info("✅ JWT токен работает")
+                
+                logger.info("✅ JWT обмен на access token успешен")
+                logger.info(f"📋 Scope: {token_data.get('scope', 'Unknown')}")
                 return True
             else:
-                logger.warning(f"⚠️ JWT токен не работает: {response.status_code}")
+                logger.error(f"❌ Ошибка обмена JWT: {response.status_code}")
+                logger.error(f"Ответ: {response.text}")
                 return False
                 
         except Exception as e:
