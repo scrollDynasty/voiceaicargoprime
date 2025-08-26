@@ -15,6 +15,9 @@ const express = require('express');
 // WebSocket полифилл для Node.js
 global.WebSocket = WebSocket;
 
+// Import audio stream fix
+const { AudioStreamSimulator, enhancedMethods, enhancedInboundCallHandler } = require('./audio_stream_fix.js');
+
 // WebRTC полифиллы для Node.js (определяем классы перед использованием)
 class MockMediaStreamTrack {
     constructor(kind = 'audio') {
@@ -327,6 +330,13 @@ class MockRTCPeerConnection {
         this.ontrack = null;
         this._localStreams = [];
         this._remoteStreams = [];
+        this._senders = [];
+        this._receivers = [];
+        this._audioStreamActive = false;
+        this._audioSimulator = null;
+        
+        // Add enhanced methods
+        Object.assign(this, enhancedMethods);
     }
 
     async createOffer(options) {
@@ -424,6 +434,14 @@ class MockRTCPeerConnection {
             }
         };
         
+        // Добавляем sender в список
+        this._senders.push(rtcRtpSender);
+        
+        // Запускаем симуляцию аудио потока для аудио треков
+        if (track.kind === 'audio' && this._startAudioStreamSimulation) {
+            this._startAudioStreamSimulation();
+        }
+        
         return rtcRtpSender;
     }
 
@@ -441,7 +459,13 @@ class MockRTCPeerConnection {
 
     close() {
         console.log('🔧 MockRTCPeerConnection: close вызван');
+        if (this._stopAudioStreamSimulation) {
+            this._stopAudioStreamSimulation();
+        }
         this.iceConnectionState = 'closed';
+        this.signalingState = 'closed';
+        this._senders = [];
+        this._receivers = [];
     }
 
     createDataChannel(label, options) {
@@ -864,6 +888,50 @@ async function initializeWebPhone() {
                 console.log('🤖 Автоматически принимаем звонок через WebPhone...');
                 await inboundCallSession.answer();
                 console.log('✅ Звонок ПРИНЯТ автоматически через WebPhone!');
+
+                // 🔊 КРИТИЧНО: Поддерживаем активное аудио соединение
+                if (inboundCallSession.peerConnection) {
+                    console.log('🎵 Запускаем поддержку активного аудио соединения...');
+                    
+                    const pc = inboundCallSession.peerConnection;
+                    
+                    // Start audio simulation if method exists
+                    if (pc._startAudioStreamSimulation) {
+                        pc._startAudioStreamSimulation();
+                    }
+                    
+                    // Keep-alive interval
+                    const keepAliveInterval = setInterval(async () => {
+                        try {
+                            const state = inboundCallSession.state;
+                            if (state === 'Established' || state === 'Answered' || state === 'Proceeding') {
+                                // Get stats to show activity
+                                if (pc.getStats) {
+                                    const stats = await pc.getStats();
+                                    console.log('📊 Аудио соединение активно, статистика обновлена:', stats.size, 'записей');
+                                }
+                                
+                                // Send keepalive if method exists
+                                if (inboundCallSession.keepAlive) {
+                                    await inboundCallSession.keepAlive();
+                                }
+                            } else if (state === 'Terminated' || state === 'Disposed') {
+                                clearInterval(keepAliveInterval);
+                            }
+                        } catch (err) {
+                            console.error('⚠️ Ошибка keep-alive:', err.message);
+                        }
+                    }, 3000); // Каждые 3 секунды
+                    
+                    // Clean up on call end
+                    inboundCallSession.once('disposed', () => {
+                        clearInterval(keepAliveInterval);
+                        if (pc._stopAudioStreamSimulation) {
+                            pc._stopAudioStreamSimulation();
+                        }
+                        console.log('🔇 Поддержка аудио остановлена для завершенного звонка');
+                    });
+                }
 
                 // Обработка принятого звонка
                 handleAcceptedCall(inboundCallSession, callId, from);
