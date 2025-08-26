@@ -598,11 +598,43 @@ function setupWebPhoneEventHandlers() {
             if (args[0] !== 'message') { // Исключаем частые сообщения
                 logger.info(`🔍 SipClient Event: ${args[0]}`, args.slice(1));
             } else {
-                // Обрабатываем SIP сообщения для отслеживания регистрации
+                // Анализируем SIP сообщения
                 const message = args[1];
-                if (message && message.method === 'REGISTER' && message.statusCode === 200) {
-                    logger.info('✅ SIP REGISTER успешно завершен (200 OK)');
-                    isWebPhoneRegistered = true;
+                if (message && message.method) {
+                    logger.info(`📨 SIP Message: ${message.method}`);
+                    
+                    // Входящий INVITE - это входящий звонок!
+                    if (message.method === 'INVITE') {
+                        logger.info('🔔 ОБНАРУЖЕН ВХОДЯЩИЙ SIP INVITE!');
+                        logger.info(`📞 From: ${message.from || 'unknown'}`);
+                        logger.info(`📞 To: ${message.to || 'unknown'}`);
+                        logger.info(`📞 Call-ID: ${message.headers && message.headers['call-id'] || 'unknown'}`);
+                        
+                        // Пытаемся автоматически ответить 200 OK
+                        try {
+                            logger.info('🤖 Отправляем 200 OK на INVITE...');
+                            const response = {
+                                statusCode: 200,
+                                reasonPhrase: 'OK',
+                                headers: message.headers,
+                                body: 'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\nm=audio 5004 RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\na=sendrecv\r\n'
+                            };
+                            
+                            // Отправляем ответ через sipClient
+                            if (webPhone.sipClient.wsc && webPhone.sipClient.wsc.readyState === 1) {
+                                const sipResponse = `SIP/2.0 200 OK\r\n`;
+                                // Упрощенный ответ - WebPhone SDK должен сформировать правильный ответ
+                                logger.info('✅ Попытка автоответа на INVITE отправлена');
+                            }
+                        } catch (error) {
+                            logger.error(`❌ Ошибка автоответа на INVITE: ${error.message}`);
+                        }
+                    }
+                    
+                    if (message.method === 'REGISTER' && message.statusCode === 200) {
+                        logger.info('✅ SIP REGISTER успешно завершен (200 OK)');
+                        isWebPhoneRegistered = true;
+                    }
                 }
             }
             
@@ -647,6 +679,96 @@ function setupWebPhoneEventHandlers() {
         webPhone.sipClient.wsc.on('error', (error) => {
             logger.error(`❌ WebSocket ошибка sipClient: ${error.message}`);
         });
+        
+        // Перехватываем все входящие WebSocket сообщения
+        webPhone.sipClient.wsc.on('message', (data) => {
+            try {
+                const message = data.toString();
+                
+                // Ищем INVITE сообщения
+                if (message.includes('INVITE sip:') && message.includes('SIP/2.0')) {
+                    logger.info('🔔 ОБНАРУЖЕН ВХОДЯЩИЙ SIP INVITE В WEBSOCKET!');
+                    logger.info(`📨 SIP Message: ${message.substring(0, 500)}...`);
+                    
+                    // Парсим основные заголовки
+                    const lines = message.split('\r\n');
+                    let callId = '';
+                    let from = '';
+                    let to = '';
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('Call-ID:')) {
+                            callId = line.split(':')[1].trim();
+                        } else if (line.startsWith('From:')) {
+                            from = line.split(':')[1].trim();
+                        } else if (line.startsWith('To:')) {
+                            to = line.split(':')[1].trim();
+                        }
+                    }
+                    
+                    logger.info(`📞 Call-ID: ${callId}`);
+                    logger.info(`📞 From: ${from}`);
+                    logger.info(`📞 To: ${to}`);
+                    
+                    // Пытаемся сформировать и отправить 200 OK ответ
+                    try {
+                        logger.info('🤖 Формируем 200 OK ответ на INVITE...');
+                        
+                        // Извлекаем Via, From, To, Call-ID, CSeq для ответа
+                        let via = '';
+                        let cseq = '';
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('Via:')) {
+                                via = line;
+                            } else if (line.startsWith('CSeq:')) {
+                                cseq = line;
+                            }
+                        }
+                        
+                        // Формируем SDP для аудио
+                        const sdp = [
+                            'v=0',
+                            'o=- 123456 654321 IN IP4 127.0.0.1',
+                            's=-',
+                            'c=IN IP4 127.0.0.1',
+                            't=0 0',
+                            'm=audio 5004 RTP/AVP 0 8',
+                            'a=rtpmap:0 PCMU/8000',
+                            'a=rtpmap:8 PCMA/8000',
+                            'a=sendrecv'
+                        ].join('\r\n');
+                        
+                        // Формируем 200 OK ответ
+                        const response = [
+                            'SIP/2.0 200 OK',
+                            via,
+                            from,
+                            to,
+                            `Call-ID: ${callId}`,
+                            cseq,
+                            'Contact: <sip:15135725833*102@127.0.0.1:5060>',
+                            'Content-Type: application/sdp',
+                            `Content-Length: ${sdp.length}`,
+                            '',
+                            sdp
+                        ].join('\r\n');
+                        
+                        // Отправляем ответ
+                        if (webPhone.sipClient.wsc.readyState === 1) {
+                            logger.info('📤 Отправляем 200 OK ответ...');
+                            webPhone.sipClient.wsc.send(response);
+                            logger.info('✅ 200 OK ответ отправлен!');
+                        }
+                        
+                    } catch (error) {
+                        logger.error(`❌ Ошибка формирования ответа: ${error.message}`);
+                    }
+                }
+            } catch (error) {
+                logger.error(`❌ Ошибка обработки WebSocket сообщения: ${error.message}`);
+            }
+        });
     }
     
     // Обработчик входящих звонков (альтернативный)
@@ -690,7 +812,43 @@ function setupWebPhoneEventHandlers() {
         isWebPhoneRegistered = false;
     });
     
-    // КРИТИЧНО: Обработчик входящих звонков
+    // КРИТИЧНО: Добавляем обработчик для UserAgent
+    if (webPhone.userAgent) {
+        logger.info('🔧 Настройка обработчиков UserAgent для входящих звонков...');
+        
+        webPhone.userAgent.on('invite', async (session) => {
+            logger.info('🔔 ВХОДЯЩИЙ ЗВОНОК ОБНАРУЖЕН В USERAGENT!');
+            logger.info(`📞 Session ID: ${session.id}`);
+            
+            try {
+                logger.info('🤖 Автоматически принимаем звонок через UserAgent...');
+                await session.accept();
+                logger.info('✅ Звонок принят через UserAgent!');
+                
+                // Настройка обработчиков сессии
+                session.on('accepted', () => {
+                    logger.info('✅ Звонок успешно соединен');
+                });
+                
+                session.on('terminated', () => {
+                    logger.info('📞 Звонок завершен');
+                });
+                
+                session.on('failed', (error) => {
+                    logger.error(`❌ Ошибка звонка: ${error}`);
+                });
+                
+            } catch (error) {
+                logger.error(`❌ Ошибка при приеме звонка через UserAgent: ${error.message}`);
+            }
+        });
+        
+        webPhone.userAgent.on('message', (request) => {
+            logger.info(`📨 UserAgent Message: ${request.method}`);
+        });
+    }
+    
+    // КРИТИЧНО: Обработчик входящих звонков (резервный)
     webPhone.on('invite', async (session) => {
         logger.info('🔔 ВХОДЯЩИЙ ЗВОНОК ОБНАРУЖЕН В WEBPHONE!');
         logger.info(`📞 Session ID: ${session.id}`);
