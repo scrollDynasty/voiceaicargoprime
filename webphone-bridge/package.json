@@ -1,0 +1,36 @@
+{
+  "name": "ringcentral-webphone-bridge",
+  "version": "1.0.0",
+  "description": "Bridge between RingCentral WebPhone and Python Voice AI",
+  "main": "webphone_bridge.js",
+  "scripts": {
+    "start": "node webphone_bridge.js",
+    "dev": "nodemon webphone_bridge.js",
+    "test": "node test_connection.js"
+  },
+  "keywords": [
+    "ringcentral",
+    "webphone",
+    "voip",
+    "webrtc",
+    "voice-ai"
+  ],
+  "author": "Prime Cargo Logistics",
+  "license": "MIT",
+  "dependencies": {
+    "@ringcentral/sdk": "^4.9.0",
+    "ringcentral-web-phone": "^1.0.0",
+    "axios": "^1.6.2",
+    "ws": "^8.14.2",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "winston": "^3.11.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

@@ -22,6 +22,7 @@ from voice_ai_engine import voice_ai_engine
 from speech_processor import async_synthesize
 from config import Config
 from ringcentral_auth import make_request
+from audio_stream_handler import audio_stream_handler  # Новый импорт
 
 # Настройка логирования
 logging.basicConfig(
@@ -754,6 +755,62 @@ async def initialize_ringcentral():
         logger.error(f"💥 Application startup failed: {e}")
         raise
 
+@app.route('/api/handle-webphone-call', methods=['POST'])
+async def handle_webphone_call():
+    """
+    Обработка звонков от WebPhone Bridge
+    
+    Получает данные о новом звонке от JavaScript WebPhone
+    и инициализирует AI обработку
+    """
+    try:
+        logger.info("🌐 Получен запрос от WebPhone Bridge")
+        
+        # Получаем данные звонка
+        call_data = request.get_json()
+        if not call_data:
+            logger.error("❌ Нет данных в запросе")
+            return jsonify({"error": "No call data provided"}), 400
+        
+        logger.info(f"📞 Данные звонка от WebPhone:")
+        logger.info(f"   Call ID: {call_data.get('callId')}")
+        logger.info(f"   From: {call_data.get('from')}")
+        logger.info(f"   To: {call_data.get('to')}")
+        logger.info(f"   Session ID: {call_data.get('sessionId')}")
+        
+        # Обрабатываем звонок через audio stream handler
+        response = await audio_stream_handler.handle_webphone_call(call_data)
+        
+        logger.info(f"✅ Звонок обработан: {response.get('status')}")
+        
+        return jsonify(response), 200
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка обработки WebPhone звонка: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+@app.route('/api/webphone/status', methods=['GET'])
+def webphone_status():
+    """Получить статус WebPhone интеграции"""
+    try:
+        active_calls = audio_stream_handler.get_active_calls()
+        
+        return jsonify({
+            "status": "operational",
+            "websocket_running": audio_stream_handler.is_running,
+            "active_calls": len(active_calls),
+            "calls": active_calls
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения статуса: {e}")
+        return jsonify({"error": str(e)}), 500
+
 def start_server():
     """Запуск webhook сервера"""
     try:
@@ -772,6 +829,18 @@ def start_server():
         
         # Инициализируем Voice AI engine
         logger.info("Инициализация Voice AI engine...")
+        
+        # Запускаем WebSocket сервер для аудио стриминга
+        def start_audio_ws_server():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(audio_stream_handler.start_websocket_server(8080))
+            loop.run_forever()
+        
+        ws_thread = threading.Thread(target=start_audio_ws_server)
+        ws_thread.daemon = True
+        ws_thread.start()
+        logger.info("✅ WebSocket сервер для аудио запущен")
         
         # Запускаем сервер
         app.run(
