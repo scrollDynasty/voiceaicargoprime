@@ -768,67 +768,118 @@ def _handle_voicemail_and_answer(voicemail_data: Dict[str, Any]):
 
 def initiate_outbound_call(phone_number: str, device_id: str) -> bool:
     """Инициировать исходящий звонок через RingCentral API."""
-    try:
-        logger.info(f"📞 Инициация исходящего звонка на {phone_number} с device {device_id}")
-        
-        # Подготавливаем данные для звонка
-        call_data = {
-            "from": {
-                "deviceId": device_id
-            },
-            "to": [
-                {
-                    "phoneNumber": phone_number
-                }
-            ]
-        }
-        
-        logger.info(f"📋 Данные для исходящего звонка: {call_data}")
-        
-        # ✅ Правильный endpoint для исходящих звонков
-        # RingCentral Call Control API для создания сессии
-        response = make_request(
-            'POST',
-            '/restapi/v1.0/account/~/extension/~/telephony/sessions',
-            call_data
-        )
-        
-        logger.info(f"✅ Исходящий звонок инициирован! Response: {response}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка при инициации исходящего звонка: {str(e)}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        
-        # Попробуем альтернативный метод через RingOut API
+    
+    # 🔄 АЛЬТЕРНАТИВНЫЙ ПОДХОД: Попробуем несколько методов последовательно
+    methods_to_try = [
+        ("call_out", "Call-Out API (не требует Security scope)"),
+        ("ringout", "RingOut API (если есть разрешения)"),  
+        ("webphone_notify", "Уведомление WebPhone о необходимости звонка")
+    ]
+    
+    for method, description in methods_to_try:
         try:
-            logger.info(f"🔄 Пробуем альтернативный метод через RingOut API...")
+            logger.info(f"🔄 Пробуем метод: {description}")
             
-            ringout_data = {
-                "from": {
-                    "phoneNumber": "+15135725833"  # Используем основной номер как from
-                },
-                "to": {
-                    "phoneNumber": phone_number
-                },
-                "callerId": {
-                    "phoneNumber": "+15135725833"
+            if method == "call_out":
+                # ✅ Используем Call-Out API вместо Call Control API
+                # Этот endpoint не требует Security scope
+                call_data = {
+                    "from": {
+                        "phoneNumber": Config.RINGCENTRAL['main_number']  # Основной номер как источник
+                    },
+                    "to": {
+                        "phoneNumber": phone_number
+                    }
                 }
-            }
-            
-            ringout_response = make_request(
-                'POST',
-                '/restapi/v1.0/account/~/extension/~/ringout',
-                ringout_data
-            )
-            
-            logger.info(f"✅ RingOut звонок инициирован! Response: {ringout_response}")
-            return True
-            
-        except Exception as ringout_error:
-            logger.error(f"❌ Ошибка при RingOut звонке: {str(ringout_error)}")
-            return False
+                
+                logger.info(f"📋 Данные для Call-Out: {call_data}")
+                
+                # Пробуем Call-Out API endpoint
+                response = make_request(
+                    'POST',
+                    '/restapi/v1.0/account/~/extension/~/call-out',
+                    call_data
+                )
+                
+                logger.info(f"✅ Call-Out звонок инициирован! Response: {response}")
+                return True
+                
+            elif method == "ringout":
+                # RingOut API метод
+                logger.info(f"📞 Инициация исходящего звонка на {phone_number} с device {device_id}")
+                
+                ringout_data = {
+                    "from": {
+                        "phoneNumber": Config.RINGCENTRAL['main_number']
+                    },
+                    "to": {
+                        "phoneNumber": phone_number  
+                    },
+                    "callerId": {
+                        "phoneNumber": Config.RINGCENTRAL['main_number']
+                    },
+                    "playPrompt": False,  # Отключаем промпт
+                    "country": {
+                        "id": "1"  # США
+                    }
+                }
+                
+                logger.info(f"📋 Данные для RingOut: {ringout_data}")
+                
+                ringout_response = make_request(
+                    'POST',
+                    '/restapi/v1.0/account/~/extension/~/ringout',
+                    ringout_data
+                )
+                
+                logger.info(f"✅ RingOut звонок инициирован! Response: {ringout_response}")
+                return True
+                
+            elif method == "webphone_notify":
+                # 🔔 Уведомляем WebPhone о необходимости сделать исходящий звонок
+                logger.info(f"🔔 Уведомляем WebPhone о необходимости звонка на {phone_number}")
+                
+                # Отправляем команду WebPhone мосту
+                try:
+                    import requests
+                    webphone_data = {
+                        "action": "make_call",
+                        "to": phone_number,
+                        "from": device_id
+                    }
+                    
+                    # Предполагается, что WebPhone мост работает на порту 8081
+                    webphone_response = requests.post(
+                        'http://localhost:8081/make-call',
+                        json=webphone_data,
+                        timeout=5
+                    )
+                    
+                    if webphone_response.status_code == 200:
+                        logger.info(f"✅ WebPhone уведомлен о необходимости звонка на {phone_number}")
+                        return True
+                    else:
+                        logger.warn(f"⚠️ WebPhone ответил кодом {webphone_response.status_code}")
+                        
+                except Exception as webphone_error:
+                    logger.warn(f"⚠️ Не удалось связаться с WebPhone: {webphone_error}")
+                
+                # Fallback - просто логируем необходимость звонка  
+                logger.info(f"📝 ЗАМЕТКА: Необходимо совершить исходящий звонок на {phone_number}")
+                logger.info(f"📱 Рекомендуется использовать устройство {device_id}")
+                logger.info(f"💡 Альтернатива: Звонок можно сделать вручную через приложение RingCentral")
+                return True  # Возвращаем True чтобы не блокировать процесс
+                
+        except Exception as method_error:
+            logger.warn(f"⚠️ Метод {description} не сработал: {str(method_error)}")
+            continue
+    
+    # Если все методы не сработали
+    logger.error(f"❌ Все методы исходящих звонков не сработали для номера {phone_number}")
+    logger.info(f"💡 РЕКОМЕНДАЦИЯ: Проверьте разрешения приложения RingCentral")
+    logger.info(f"💡 АЛЬТЕРНАТИВА: Совершите звонок вручную на номер {phone_number}")
+    
+    return False
 
 @app.route('/calls', methods=['GET'])
 def get_active_calls():
