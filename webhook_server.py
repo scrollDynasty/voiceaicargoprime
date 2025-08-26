@@ -368,9 +368,13 @@ def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
             logger.info(f"Обрабатываем party: direction={direction}, status={status}, party_id={party_id}")
             
             # ✅ Улучшенная логика обработки входящих звонков
-            # Обрабатываем звонки в состоянии "Ringing" для автоматического ответа
-            if direction == 'Inbound' and status.get('code') == 'Ringing':
-                logger.info(f"🔔 Обнаружен входящий звонок в состоянии RINGING: session={telephony_session_id}, party={party_id}")
+            # Обрабатываем звонки в состояниях "Ringing" или "Proceeding" для автоматического ответа
+            if direction == 'Inbound' and status.get('code') in ['Ringing', 'Proceeding']:
+                logger.info(f"🔔 Обнаружен входящий звонок в состоянии {status.get('code')}: session={telephony_session_id}, party={party_id}")
+                
+                # Извлекаем deviceId из данных получателя
+                to_data = party.get('to', {})
+                device_id = to_data.get('deviceId')
                 
                 # Подготавливаем данные звонка
                 call_data = {
@@ -378,9 +382,10 @@ def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
                     "telephonySessionId": telephony_session_id,
                     "partyId": party_id,
                     "from": party.get('from', {}),
-                    "to": party.get('to', {}),
+                    "to": to_data,
                     "direction": direction,
                     "status": status,
+                    "deviceId": device_id,  # Добавляем deviceId
                     "timestamp": datetime.now().isoformat(),
                     "source": "webhook"  # Явно указываем источник
                 }
@@ -388,8 +393,9 @@ def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
                 logger.info(f"📞 Подготовлены данные звонка для автоматического ответа:")
                 logger.info(f"   Session ID: {telephony_session_id}")
                 logger.info(f"   Party ID: {party_id}")
+                logger.info(f"   Device ID: {device_id}")
                 logger.info(f"   От: {party.get('from', {}).get('phoneNumber', 'Unknown')}")
-                logger.info(f"   К: {party.get('to', {}).get('phoneNumber', 'Unknown')}")
+                logger.info(f"   К: {to_data.get('phoneNumber', 'Unknown')}")
                 
                 # Сохраняем информацию о звонке
                 with call_lock:
@@ -460,9 +466,18 @@ async def _answer_and_process_call(call_data: Dict[str, Any]):
         # Отвечаем на звонок через RingCentral API
         try:
             logger.info(f"🔄 Отправляем запрос на ответ для звонка {call_id}")
+            
+            # Подготавливаем тело запроса с deviceId
+            device_id = call_data.get('deviceId')
+            request_body = {}
+            if device_id:
+                request_body["deviceId"] = device_id
+                logger.info(f"📱 Используем deviceId: {device_id}")
+            
             answer_response = make_request(
                 'POST',
-                f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{telephony_session_id}/parties/{party_id}/answer'
+                f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{telephony_session_id}/parties/{party_id}/answer',
+                request_body if request_body else None
             )
             logger.info(f"✅ Успешно ответили на звонок {call_id}")
             logger.info(f"📋 Ответ API: {answer_response}")
@@ -907,7 +922,7 @@ def handle_incoming_call():
         logger.error(f"Ошибка обработки входящего звонка: {e}")
         return jsonify({"error": str(e)}), 500
 
-def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[str, Any]) -> bool:
+def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[str, Any], device_id: str = None) -> bool:
     """
     Автоматически принять звонок через RingCentral Call Control API
     
@@ -915,6 +930,7 @@ def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[
         session_id: ID телефонной сессии
         party_id: ID участника звонка
         caller_info: Информация о звонящем
+        device_id: ID устройства для ответа на звонок
         
     Returns:
         bool: True если звонок успешно принят
@@ -922,11 +938,20 @@ def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[
     try:
         logger.info(f"🔄 Попытка автоматически ответить на звонок: session={session_id}, party={party_id}")
         
+        # Подготавливаем тело запроса с deviceId
+        request_body = {}
+        if device_id:
+            request_body["deviceId"] = device_id
+            logger.info(f"📱 Используем deviceId: {device_id}")
+        else:
+            logger.warning("⚠️ deviceId не предоставлен, пробуем без него")
+        
         # ✅ Правильный endpoint для ответа на звонок
         # Документация: https://developers.ringcentral.com/api-reference/Call-Control/answerCall
         response = make_request(
             'POST',
-            f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{session_id}/parties/{party_id}/answer'
+            f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{session_id}/parties/{party_id}/answer',
+            request_body if request_body else None
         )
         
         logger.info(f"✅ Звонок успешно принят! Response: {response}")
@@ -1126,7 +1151,8 @@ def process_call(call_data: Dict[str, Any]):
             
             # 1. Автоматически отвечаем на звонок
             if telephony_session_id and party_id:
-                if answer_call_automatically(telephony_session_id, party_id, caller_info):
+                device_id = call_data.get('deviceId')
+                if answer_call_automatically(telephony_session_id, party_id, caller_info, device_id):
                     logger.info("✅ Звонок принят, запускаем AI разговор...")
                     
                     # 2. Запускаем AI разговор
