@@ -72,6 +72,9 @@ def log_response_info(response):
 active_calls = {}
 call_lock = threading.Lock()
 subscription_id = None
+# Отслеживание попыток ответа на звонки
+answered_calls = set()  # Множество ID звонков, на которые уже пытались ответить
+answer_lock = threading.Lock()
 
 def get_current_device_id():
     """Получить актуальный Device ID из WebPhone Bridge"""
@@ -464,8 +467,9 @@ def _handle_telephony_session(session_data: Dict[str, Any], webhook_data: Dict[s
             logger.info(f"Обрабатываем party: direction={direction}, status={status}, party_id={party_id}")
             
             # ✅ Улучшенная логика обработки входящих звонков
-            # Обрабатываем звонки в состояниях "Ringing" или "Proceeding" для автоматического ответа
-            if direction == 'Inbound' and status.get('code') in ['Ringing', 'Proceeding']:
+            # Обрабатываем звонки ТОЛЬКО в состоянии "Ringing" для автоматического ответа
+            # "Proceeding" - слишком рано, "Setup" - еще не готово
+            if direction == 'Inbound' and status.get('code') == 'Ringing':
                 logger.info(f"🔔 Обнаружен входящий звонок в состоянии {status.get('code')}: session={telephony_session_id}, party={party_id}")
                 
                 # Извлекаем deviceId из данных получателя
@@ -512,7 +516,7 @@ def _handle_telephony_session(session_data: Dict[str, Any], webhook_data: Dict[s
                 logger.info(f"📞 Запущен автоматический ответ на звонок {call_data['callId']}")
                 
             elif direction == 'Inbound' and status.get('code') in ['Proceeding', 'Setup', 'Alerting']:
-                # Логируем входящие звонки в других состояниях без обработки
+                # Логируем входящие звонки в других состояниях без обработки  
                 logger.info(f"📱 Входящий звонок в состоянии {status.get('code')} (ожидаем Ringing): session={telephony_session_id}, party={party_id}")
                 
             elif direction == 'Inbound' and status.get('code') in ['Answered', 'Connected']:
@@ -529,6 +533,11 @@ def _handle_telephony_session(session_data: Dict[str, Any], webhook_data: Dict[s
                     if call_id in active_calls:
                         del active_calls[call_id]
                         logger.info(f"🗑️ Звонок {call_id} удален из активных")
+                
+                # Удаляем из отвеченных звонков
+                with answer_lock:
+                    answered_calls.discard(call_id)
+                    logger.info(f"🗑️ Звонок {call_id} удален из отвеченных")
             else:
                 if direction == 'Inbound':
                     logger.info(f"⏭️ Пропускаем входящий звонок со статусом {status.get('code')} (не подходит для ответа)")
@@ -623,6 +632,40 @@ def _run_engine_for_call(call_data: Dict[str, Any]):
             loop.close()
     except Exception as e:
         logger.error(f"❌ Ошибка запуска VoiceAIEngine: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+def _run_answer_call(call_data: Dict[str, Any]):
+    """Автоматически ответить на звонок из синхронного контекста."""
+    try:
+        logger.info(f"📞 Запуск автоматического ответа на звонок: callId={call_data.get('callId')}")
+        
+        # Извлекаем необходимые данные
+        session_id = call_data.get('telephonySessionId') or call_data.get('sessionId')
+        party_id = call_data.get('partyId')
+        device_id = call_data.get('deviceId')
+        
+        if not session_id or not party_id:
+            logger.error(f"❌ Недостаточно данных для ответа на звонок: session_id={session_id}, party_id={party_id}")
+            return
+        
+        # Извлекаем информацию о звонящем
+        caller_info = {
+            'from': call_data.get('from', ''),
+            'to': call_data.get('to', ''),
+            'direction': call_data.get('direction', 'Inbound')
+        }
+        
+        # Вызываем функцию автоматического ответа
+        success = answer_call_automatically(session_id, party_id, caller_info, device_id)
+        
+        if success:
+            logger.info(f"✅ Звонок успешно принят автоматически: callId={call_data.get('callId')}")
+        else:
+            logger.error(f"❌ Не удалось автоматически принять звонок: callId={call_data.get('callId')}")
+            
+    except Exception as e:
+        logger.error(f"❌ Ошибка при автоматическом ответе на звонок: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
 
@@ -1039,7 +1082,43 @@ def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[
         bool: True если звонок успешно принят
     """
     try:
+        call_id = f"{session_id}_{party_id}"
         logger.info(f"🔄 Попытка автоматически ответить на звонок: session={session_id}, party={party_id}")
+        
+        # Проверяем, не пытались ли уже ответить на этот звонок
+        with answer_lock:
+            if call_id in answered_calls:
+                logger.info(f"⚠️ На звонок {call_id} уже пытались ответить, пропускаем")
+                return False
+            answered_calls.add(call_id)
+            logger.info(f"🔒 Звонок {call_id} отмечен как обрабатываемый")
+        
+        # Сначала проверяем статус звонка
+        try:
+            session_info = make_request('GET', f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{session_id}')
+            logger.info(f"📋 Информация о сессии перед ответом: {session_info}")
+            
+            # Ищем нужную party и проверяем её статус
+            parties = session_info.get('parties', [])
+            target_party = None
+            for party in parties:
+                if party.get('id') == party_id:
+                    target_party = party
+                    break
+            
+            if not target_party:
+                logger.error(f"❌ Party {party_id} не найдена в сессии {session_id}")
+                return False
+            
+            party_status = target_party.get('status', {}).get('code')
+            if party_status not in ['Ringing', 'Proceeding']:
+                logger.warning(f"⚠️ Неподходящий статус для ответа: {party_status} (ожидается Ringing)")
+                return False
+                
+            logger.info(f"✅ Статус звонка подходит для ответа: {party_status}")
+            
+        except Exception as check_error:
+            logger.warning(f"⚠️ Не удалось проверить статус звонка, пробуем ответить: {check_error}")
         
         # Подготавливаем тело запроса с deviceId
         request_body = {}

@@ -980,12 +980,13 @@ async function handleWebhookEvent(eventData) {
             if (body && body.sessionId) {
                 logger.info(`📞 Найден sessionId: ${body.sessionId}`);
                 
-                // Проверяем, есть ли входящие звонки в состоянии Setup
+                // Проверяем, есть ли входящие звонки в состоянии Ringing
+                // "Setup" и "Proceeding" - слишком рано для ответа
                 if (body.parties) {
                     const inboundCall = body.parties.find(party => 
                         party.direction === 'Inbound' && 
                         party.status && 
-                        party.status.code === 'Setup'
+                        party.status.code === 'Ringing'
                     );
                     
                     if (inboundCall) {
@@ -1231,10 +1232,11 @@ async function forceAnswerCall(sessionId) {
         logger.info('📋 Информация о сессии:', JSON.stringify(sessionInfo, null, 2));
         
         // Находим party ID для входящего звонка
+        // Принимаем звонки ТОЛЬКО в состоянии "Ringing", не "Setup" или "Proceeding"
         const inboundParty = sessionInfo.parties.find(party => 
             party.direction === 'Inbound' && 
             party.status && 
-            party.status.code === 'Setup'
+            party.status.code === 'Ringing'
         );
         
         if (inboundParty) {
