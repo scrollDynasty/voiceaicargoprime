@@ -519,3 +519,363 @@
 2025-08-26T17:46:40.846Z [INFO] 🌐 WebSocket сервер запущен на порту 8081
 2025-08-26T17:47:10.869Z [ERROR] ❌ Ошибка проверки здоровья: webPhone.isConnected is not a function
 2025-08-26T17:47:35.732Z [INFO] 🛑 Получен сигнал завершения...
+2025-08-26T17:49:54.628Z [INFO] 🎯 Запуск RingCentral WebPhone Bridge...
+2025-08-26T17:49:54.629Z [INFO] 📋 Конфигурация:
+2025-08-26T17:49:54.629Z [INFO]    Client ID: bXCZ510zNm...
+2025-08-26T17:49:54.629Z [INFO]    Server: https://platform.ringcentral.com
+2025-08-26T17:49:54.629Z [INFO]    Python Server: http://localhost:5000
+2025-08-26T17:49:54.629Z [INFO] 🚀 Инициализация RingCentral SDK...
+2025-08-26T17:49:54.630Z [INFO] 🔐 Авторизация через JWT токен...
+2025-08-26T17:49:55.412Z [INFO] ✅ RingCentral SDK успешно инициализирован
+2025-08-26T17:49:55.755Z [INFO] 📞 Расширение: 102
+2025-08-26T17:49:55.755Z [INFO] 👤 Пользователь: Alex Bakhronov
+2025-08-26T17:49:55.755Z [INFO] 📞 Инициализация WebPhone...
+2025-08-26T17:49:55.756Z [INFO] 🔍 Получение SIP данных для WebPhone...
+2025-08-26T17:49:56.145Z [INFO] ✅ SIP данные получены успешно
+2025-08-26T17:49:56.145Z [INFO] 🔧 SIP Username: 15135725833*102
+2025-08-26T17:49:56.145Z [INFO] 🔧 SIP Domain: sip.ringcentral.com
+2025-08-26T17:49:56.145Z [INFO] 🔧 SIP Proxy: sip213-1111.ringcentral.com:8083
+2025-08-26T17:49:56.145Z [INFO] 🔧 Конфигурация WebPhone:
+2025-08-26T17:49:56.145Z [INFO] ✅ Создаем WebPhone с полными SIP данными...
+2025-08-26T17:49:56.154Z [INFO] 🔄 Запуск регистрации WebPhone...
+2025-08-26T17:49:57.101Z [INFO] ✅ WebPhone запущен через webPhone.start()
+2025-08-26T17:49:57.101Z [INFO] ✅ WebPhone успешно инициализирован
+2025-08-26T17:49:57.109Z [INFO] 🩺 Мониторинг здоровья запущен (интервал: 30000ms)
+2025-08-26T17:49:57.109Z [INFO] ✅ WebPhone Bridge успешно запущен и готов принимать звонки!
+2025-08-26T17:49:57.109Z [INFO] 🎯 Ожидание входящих звонков...
+2025-08-26T17:49:57.109Z [INFO] 🌐 WebSocket сервер запущен на порту 8081
+2025-08-26T17:50:27.133Z [WARN] ⚠️ WebPhone не зарегистрирован, попытка переподключения...
+2025-08-26T17:50:27.133Z [INFO] 🔄 Попытка переподключения 1/5...
+2025-08-26T17:50:27.133Z [ERROR] ❌ Ошибка переподключения: webPhone.disconnect is not a function
+2025-08-26T17:50:53.589Z [INFO] 🛑 Получен сигнал завершения...
+2025-08-26T17:54:10.686Z [INFO] 🎯 Запуск RingCentral WebPhone Bridge...
+2025-08-26T17:54:10.687Z [INFO] 📋 Конфигурация:
+2025-08-26T17:54:10.687Z [INFO]    Client ID: bXCZ510zNm...
+2025-08-26T17:54:10.688Z [INFO]    Server: https://platform.ringcentral.com
+2025-08-26T17:54:10.688Z [INFO]    Python Server: http://localhost:5000
+2025-08-26T17:54:10.688Z [INFO] 🚀 Инициализация RingCentral SDK...
+2025-08-26T17:54:10.688Z [INFO] 🔐 Авторизация через JWT токен...
+2025-08-26T17:54:11.357Z [INFO] ✅ RingCentral SDK успешно инициализирован
+2025-08-26T17:54:11.742Z [INFO] 📞 Расширение: 102
+2025-08-26T17:54:11.742Z [INFO] 👤 Пользователь: Alex Bakhronov
+2025-08-26T17:54:11.743Z [INFO] 📞 Инициализация WebPhone...
+2025-08-26T17:54:11.743Z [INFO] 🔍 Получение SIP данных для WebPhone...
+2025-08-26T17:54:12.125Z [INFO] ✅ SIP данные получены успешно
+2025-08-26T17:54:12.126Z [INFO] 🔧 SIP Username: 15135725833*102
+2025-08-26T17:54:12.126Z [INFO] 🔧 SIP Domain: sip.ringcentral.com
+2025-08-26T17:54:12.126Z [INFO] 🔧 SIP Proxy: sip232-1111.ringcentral.com:8083
+2025-08-26T17:54:12.126Z [INFO] 🔧 Конфигурация WebPhone:
+2025-08-26T17:54:12.126Z [INFO] ✅ Создаем WebPhone с полными SIP данными...
+2025-08-26T17:54:12.134Z [INFO] 🔄 Запуск регистрации WebPhone...
+2025-08-26T17:54:12.965Z [INFO] ✅ WebPhone запущен через webPhone.start()
+2025-08-26T17:54:12.965Z [INFO] ✅ WebPhone успешно инициализирован
+2025-08-26T17:54:12.972Z [INFO] 🩺 Мониторинг здоровья запущен (интервал: 30000ms)
+2025-08-26T17:54:12.973Z [INFO] ✅ WebPhone Bridge успешно запущен и готов принимать звонки!
+2025-08-26T17:54:12.973Z [INFO] 🎯 Ожидание входящих звонков...
+2025-08-26T17:54:12.973Z [INFO] 🌐 WebSocket сервер запущен на порту 8081
+2025-08-26T17:54:14.968Z [INFO] 📊 Статус WebPhone после инициализации: {"webPhoneExists":true,"isRegistered":false,"userAgentExists":false,"activeCalls":0,"maxCalls":5}
+2025-08-26T17:54:42.996Z [WARN] ⚠️ WebPhone не зарегистрирован (статус: {"webPhoneExists":true,"isRegistered":false,"userAgentExists":false,"activeCalls":0,"maxCalls":5}), попытка переподключения...
+2025-08-26T17:54:42.997Z [INFO] 🔄 Попытка переподключения 1/5...
+2025-08-26T17:54:47.999Z [INFO] 🚀 Инициализация RingCentral SDK...
+2025-08-26T17:54:48.000Z [INFO] 🔐 Авторизация через JWT токен...
+2025-08-26T17:54:48.650Z [INFO] ✅ RingCentral SDK успешно инициализирован
+2025-08-26T17:54:48.992Z [INFO] 📞 Расширение: 102
+2025-08-26T17:54:48.992Z [INFO] 👤 Пользователь: Alex Bakhronov
+2025-08-26T17:54:48.992Z [INFO] 📞 Инициализация WebPhone...
+2025-08-26T17:54:48.992Z [INFO] 🔍 Получение SIP данных для WebPhone...
+2025-08-26T17:54:49.386Z [INFO] ✅ SIP данные получены успешно
+2025-08-26T17:54:49.386Z [INFO] 🔧 SIP Username: 15135725833*102
+2025-08-26T17:54:49.386Z [INFO] 🔧 SIP Domain: sip.ringcentral.com
+2025-08-26T17:54:49.386Z [INFO] 🔧 SIP Proxy: sip221-1111.ringcentral.com:8083
+2025-08-26T17:54:49.386Z [INFO] 🔧 Конфигурация WebPhone:
+2025-08-26T17:54:49.386Z [INFO] ✅ Создаем WebPhone с полными SIP данными...
+2025-08-26T17:54:49.387Z [INFO] 🔄 Запуск регистрации WebPhone...
+2025-08-26T17:54:50.373Z [INFO] ✅ WebPhone запущен через webPhone.start()
+2025-08-26T17:54:50.373Z [INFO] ✅ WebPhone успешно инициализирован
+2025-08-26T17:54:50.373Z [INFO] ✅ Переподключение успешно
+2025-08-26T17:54:52.375Z [INFO] 📊 Статус WebPhone после инициализации: {"webPhoneExists":true,"isRegistered":false,"userAgentExists":false,"activeCalls":0,"maxCalls":5}
+2025-08-26T17:54:56.868Z [INFO] 🛑 Получен сигнал завершения...
+2025-08-26T17:55:53.017Z [INFO] 🎯 Запуск RingCentral WebPhone Bridge...
+2025-08-26T17:55:53.018Z [INFO] 📋 Конфигурация:
+2025-08-26T17:55:53.018Z [INFO]    Client ID: bXCZ510zNm...
+2025-08-26T17:55:53.018Z [INFO]    Server: https://platform.ringcentral.com
+2025-08-26T17:55:53.018Z [INFO]    Python Server: http://localhost:5000
+2025-08-26T17:55:53.018Z [INFO] 🚀 Инициализация RingCentral SDK...
+2025-08-26T17:55:53.019Z [INFO] 🔐 Авторизация через JWT токен...
+2025-08-26T17:55:53.745Z [INFO] ✅ RingCentral SDK успешно инициализирован
+2025-08-26T17:55:54.083Z [INFO] 📞 Расширение: 102
+2025-08-26T17:55:54.083Z [INFO] 👤 Пользователь: Alex Bakhronov
+2025-08-26T17:55:54.084Z [INFO] 📞 Инициализация WebPhone...
+2025-08-26T17:55:54.084Z [INFO] 🔍 Получение SIP данных для WebPhone...
+2025-08-26T17:55:54.453Z [INFO] ✅ SIP данные получены успешно
+2025-08-26T17:57:59.037Z [INFO] 🎯 Запуск RingCentral WebPhone Bridge...
+2025-08-26T17:57:59.038Z [INFO] 📋 Конфигурация:
+2025-08-26T17:57:59.039Z [INFO]    Client ID: bXCZ510zNm...
+2025-08-26T17:57:59.039Z [INFO]    Server: https://platform.ringcentral.com
+2025-08-26T17:57:59.039Z [INFO]    Python Server: http://localhost:5000
+2025-08-26T17:57:59.039Z [INFO] 🚀 Инициализация RingCentral SDK...
+2025-08-26T17:57:59.040Z [INFO] 🔐 Авторизация через JWT токен...
+2025-08-26T17:57:59.982Z [INFO] ✅ RingCentral SDK успешно инициализирован
+2025-08-26T17:58:00.332Z [INFO] 📞 Расширение: 102
+2025-08-26T17:58:00.332Z [INFO] 👤 Пользователь: Alex Bakhronov
+2025-08-26T17:58:00.332Z [INFO] 📞 Инициализация WebPhone...
+2025-08-26T17:58:00.332Z [INFO] 🔧 WebPhone конструктор: function
+2025-08-26T17:58:00.332Z [INFO] 🔧 WebPhone прототип: 
+2025-08-26T17:58:00.333Z [INFO] 🔍 Получение SIP данных для WebPhone...
+2025-08-26T17:58:01.016Z [INFO] ✅ SIP данные получены успешно
+2025-08-26T17:58:12.672Z [INFO] 🎯 Запуск RingCentral WebPhone Bridge...
+2025-08-26T17:58:12.673Z [INFO] 📋 Конфигурация:
+2025-08-26T17:58:12.673Z [INFO]    Client ID: bXCZ510zNm...
+2025-08-26T17:58:12.673Z [INFO]    Server: https://platform.ringcentral.com
+2025-08-26T17:58:12.673Z [INFO]    Python Server: http://localhost:5000
+2025-08-26T17:58:12.673Z [INFO] 🚀 Инициализация RingCentral SDK...
+2025-08-26T17:58:12.674Z [INFO] 🔐 Авторизация через JWT токен...
+2025-08-26T17:58:13.476Z [INFO] ✅ RingCentral SDK успешно инициализирован
+2025-08-26T17:58:13.813Z [INFO] 📞 Расширение: 102
+2025-08-26T17:58:13.813Z [INFO] 👤 Пользователь: Alex Bakhronov
+2025-08-26T17:58:13.814Z [INFO] 📞 Инициализация WebPhone...
+2025-08-26T17:58:13.814Z [WARN] ⚠️ Не удалось определить версию WebPhone SDK
+2025-08-26T17:58:13.814Z [INFO] 🔧 WebPhone конструктор: function
+2025-08-26T17:58:13.814Z [INFO] 🔧 WebPhone прототип: 
+2025-08-26T17:58:13.814Z [INFO] 🔍 Получение SIP данных для WebPhone...
+2025-08-26T17:58:14.181Z [INFO] ✅ SIP данные получены успешно
+2025-08-26T17:59:29.311Z [INFO] 🎯 Запуск RingCentral WebPhone Bridge...
+2025-08-26T17:59:29.312Z [INFO] 📋 Конфигурация:
+2025-08-26T17:59:29.313Z [INFO]    Client ID: bXCZ510zNm...
+2025-08-26T17:59:29.313Z [INFO]    Server: https://platform.ringcentral.com
+2025-08-26T17:59:29.313Z [INFO]    Python Server: http://localhost:5000
+2025-08-26T17:59:29.313Z [INFO] 🚀 Инициализация RingCentral SDK...
+2025-08-26T17:59:29.314Z [INFO] 🔐 Авторизация через JWT токен...
+2025-08-26T17:59:29.981Z [INFO] ✅ RingCentral SDK успешно инициализирован
+2025-08-26T17:59:30.405Z [INFO] 📞 Расширение: 102
+2025-08-26T17:59:30.405Z [INFO] 👤 Пользователь: Alex Bakhronov
+2025-08-26T17:59:30.406Z [INFO] 📞 Инициализация WebPhone...
+2025-08-26T17:59:30.406Z [WARN] ⚠️ Не удалось определить версию WebPhone SDK
+2025-08-26T17:59:30.406Z [INFO] 🔧 WebPhone конструктор: function
+2025-08-26T17:59:30.406Z [INFO] 🔧 WebPhone прототип: 
+2025-08-26T17:59:30.407Z [INFO] 🔍 Получение SIP данных для WebPhone...
+2025-08-26T17:59:30.924Z [INFO] ✅ SIP данные получены успешно
+2025-08-26T17:59:30.924Z [INFO] 🔧 SIP Username: 15135725833*102
+2025-08-26T17:59:30.924Z [INFO] 🔧 SIP Domain: sip.ringcentral.com
+2025-08-26T17:59:30.924Z [INFO] 🔧 SIP Proxy: sip221-1111.ringcentral.com:8083
+2025-08-26T17:59:30.924Z [INFO] 🔍 Структура sipInfo:
+2025-08-26T17:59:30.925Z [INFO] 🔧 Конфигурация WebPhone:
+2025-08-26T17:59:30.925Z [INFO] ✅ Создаем WebPhone с полными SIP данными...
+2025-08-26T17:59:30.925Z [INFO] 🔧 WebPhone опции:
+2025-08-26T17:59:30.931Z [INFO] 🔍 Диагностика WebPhone объекта:
+2025-08-26T17:59:30.931Z [INFO]    - webPhone: object
+2025-08-26T17:59:30.931Z [INFO]    - webPhone keys: listeners, tempListeners, sipInfo, sipClient, deviceManager, callSessions, autoAnswer, options, disposed
+2025-08-26T17:59:30.931Z [INFO] ✅ Найден sipClient в WebPhone
+2025-08-26T17:59:30.932Z [INFO] ✅ userAgent успешно создан
+2025-08-26T17:59:30.932Z [INFO] 🔍 Структура WebPhone объекта:
+2025-08-26T17:59:30.932Z [INFO]    - webPhone: object
+2025-08-26T17:59:30.932Z [INFO]    - userAgent: object
+2025-08-26T17:59:30.932Z [INFO]    - userAgent.state: undefined
+2025-08-26T17:59:30.932Z [INFO]    - userAgent.isRegistered: undefined
+2025-08-26T17:59:30.932Z [INFO] 🔄 Запуск регистрации WebPhone...
+2025-08-26T17:59:30.932Z [INFO] 🔍 Доступные методы WebPhone:
+2025-08-26T17:59:30.932Z [INFO]    - webPhone.start: function
+2025-08-26T17:59:30.932Z [INFO]    - webPhone.register: undefined
+2025-08-26T17:59:30.932Z [INFO]    - webPhone.userAgent.start: function
+2025-08-26T17:59:30.932Z [INFO]    - webPhone.userAgent.register: function
+2025-08-26T17:59:30.932Z [INFO]    - webPhone.sipClient: object
+2025-08-26T17:59:32.215Z [INFO] ✅ WebPhone запущен через webPhone.start()
+2025-08-26T17:59:32.215Z [INFO] ✅ WebPhone успешно инициализирован
+2025-08-26T17:59:32.222Z [INFO] 🩺 Мониторинг здоровья запущен (интервал: 30000ms)
+2025-08-26T17:59:32.222Z [INFO] ✅ WebPhone Bridge успешно запущен и готов принимать звонки!
+2025-08-26T17:59:32.223Z [INFO] 🎯 Ожидание входящих звонков...
+2025-08-26T17:59:32.223Z [INFO] 🌐 WebSocket сервер запущен на порту 8081
+2025-08-26T17:59:34.219Z [INFO] 📊 Статус WebPhone после инициализации: {"webPhoneExists":true,"isRegistered":false,"userAgentExists":true,"sipClientExists":true,"activeCalls":0,"maxCalls":5,"userAgentState":"unknown","userAgentRegistered":"method_not_available"}
+2025-08-26T18:00:02.245Z [WARN] ⚠️ WebPhone не зарегистрирован (статус: {"webPhoneExists":true,"isRegistered":false,"userAgentExists":true,"sipClientExists":true,"activeCalls":0,"maxCalls":5,"userAgentState":"unknown","userAgentRegistered":"method_not_available"}), попытка переподключения...
+2025-08-26T18:00:02.245Z [INFO] 🔄 Попытка переподключения 1/5...
+2025-08-26T18:00:07.757Z [INFO] 🚀 Инициализация RingCentral SDK...
+2025-08-26T18:00:07.758Z [INFO] 🔐 Авторизация через JWT токен...
+2025-08-26T18:00:08.673Z [INFO] ✅ RingCentral SDK успешно инициализирован
+2025-08-26T18:00:09.053Z [INFO] 📞 Расширение: 102
+2025-08-26T18:00:09.053Z [INFO] 👤 Пользователь: Alex Bakhronov
+2025-08-26T18:00:09.053Z [INFO] 📞 Инициализация WebPhone...
+2025-08-26T18:00:09.053Z [WARN] ⚠️ Не удалось определить версию WebPhone SDK
+2025-08-26T18:00:09.053Z [INFO] 🔧 WebPhone конструктор: function
+2025-08-26T18:00:09.053Z [INFO] 🔧 WebPhone прототип: 
+2025-08-26T18:00:09.053Z [INFO] 🔍 Получение SIP данных для WebPhone...
+2025-08-26T18:00:09.440Z [INFO] ✅ SIP данные получены успешно
+2025-08-26T18:00:09.440Z [INFO] 🔧 SIP Username: 15135725833*102
+2025-08-26T18:00:09.440Z [INFO] 🔧 SIP Domain: sip.ringcentral.com
+2025-08-26T18:00:09.440Z [INFO] 🔧 SIP Proxy: sip221-1111.ringcentral.com:8083
+2025-08-26T18:00:09.440Z [INFO] 🔍 Структура sipInfo:
+2025-08-26T18:00:09.440Z [INFO] 🔧 Конфигурация WebPhone:
+2025-08-26T18:00:09.440Z [INFO] ✅ Создаем WebPhone с полными SIP данными...
+2025-08-26T18:00:09.440Z [INFO] 🔧 WebPhone опции:
+2025-08-26T18:00:09.441Z [INFO] 🔍 Диагностика WebPhone объекта:
+2025-08-26T18:00:09.442Z [INFO]    - webPhone: object
+2025-08-26T18:00:09.442Z [INFO]    - webPhone keys: listeners, tempListeners, sipInfo, sipClient, deviceManager, callSessions, autoAnswer, options, disposed
+2025-08-26T18:00:09.442Z [INFO] ✅ Найден sipClient в WebPhone
+2025-08-26T18:00:09.442Z [INFO] ✅ userAgent успешно создан
+2025-08-26T18:00:09.442Z [INFO] 🔍 Структура WebPhone объекта:
+2025-08-26T18:00:09.442Z [INFO]    - webPhone: object
+2025-08-26T18:00:09.442Z [INFO]    - userAgent: object
+2025-08-26T18:00:09.442Z [INFO]    - userAgent.state: undefined
+2025-08-26T18:00:09.442Z [INFO]    - userAgent.isRegistered: undefined
+2025-08-26T18:00:09.442Z [INFO] 🔄 Запуск регистрации WebPhone...
+2025-08-26T18:00:09.442Z [INFO] 🔍 Доступные методы WebPhone:
+2025-08-26T18:00:09.442Z [INFO]    - webPhone.start: function
+2025-08-26T18:00:09.442Z [INFO]    - webPhone.register: undefined
+2025-08-26T18:00:09.442Z [INFO]    - webPhone.userAgent.start: function
+2025-08-26T18:00:09.442Z [INFO]    - webPhone.userAgent.register: function
+2025-08-26T18:00:09.442Z [INFO]    - webPhone.sipClient: object
+2025-08-26T18:00:10.377Z [INFO] ✅ WebPhone запущен через webPhone.start()
+2025-08-26T18:00:10.378Z [INFO] ✅ WebPhone успешно инициализирован
+2025-08-26T18:00:10.378Z [INFO] ✅ Переподключение успешно
+2025-08-26T18:00:12.379Z [INFO] 📊 Статус WebPhone после инициализации: {"webPhoneExists":true,"isRegistered":false,"userAgentExists":true,"sipClientExists":true,"activeCalls":0,"maxCalls":5,"userAgentState":"unknown","userAgentRegistered":"method_not_available"}
+2025-08-26T18:00:32.260Z [WARN] ⚠️ WebPhone не зарегистрирован (статус: {"webPhoneExists":true,"isRegistered":false,"userAgentExists":true,"sipClientExists":true,"activeCalls":0,"maxCalls":5,"userAgentState":"unknown","userAgentRegistered":"method_not_available"}), попытка переподключения...
+2025-08-26T18:00:32.261Z [INFO] 🔄 Попытка переподключения 1/5...
+2025-08-26T18:00:37.735Z [INFO] 🚀 Инициализация RingCentral SDK...
+2025-08-26T18:00:37.735Z [INFO] 🔐 Авторизация через JWT токен...
+2025-08-26T18:00:38.375Z [INFO] ✅ RingCentral SDK успешно инициализирован
+2025-08-26T18:00:38.725Z [INFO] 📞 Расширение: 102
+2025-08-26T18:00:38.725Z [INFO] 👤 Пользователь: Alex Bakhronov
+2025-08-26T18:00:38.725Z [INFO] 📞 Инициализация WebPhone...
+2025-08-26T18:00:38.725Z [WARN] ⚠️ Не удалось определить версию WebPhone SDK
+2025-08-26T18:00:38.725Z [INFO] 🔧 WebPhone конструктор: function
+2025-08-26T18:00:38.725Z [INFO] 🔧 WebPhone прототип: 
+2025-08-26T18:00:38.725Z [INFO] 🔍 Получение SIP данных для WebPhone...
+2025-08-26T18:00:39.100Z [INFO] ✅ SIP данные получены успешно
+2025-08-26T18:00:39.101Z [INFO] 🔧 SIP Username: 15135725833*102
+2025-08-26T18:00:39.101Z [INFO] 🔧 SIP Domain: sip.ringcentral.com
+2025-08-26T18:00:39.101Z [INFO] 🔧 SIP Proxy: sip213-1111.ringcentral.com:8083
+2025-08-26T18:00:39.101Z [INFO] 🔍 Структура sipInfo:
+2025-08-26T18:00:39.101Z [INFO] 🔧 Конфигурация WebPhone:
+2025-08-26T18:00:39.101Z [INFO] ✅ Создаем WebPhone с полными SIP данными...
+2025-08-26T18:00:39.101Z [INFO] 🔧 WebPhone опции:
+2025-08-26T18:00:39.102Z [INFO] 🔍 Диагностика WebPhone объекта:
+2025-08-26T18:00:39.102Z [INFO]    - webPhone: object
+2025-08-26T18:00:39.102Z [INFO]    - webPhone keys: listeners, tempListeners, sipInfo, sipClient, deviceManager, callSessions, autoAnswer, options, disposed
+2025-08-26T18:00:39.102Z [INFO] ✅ Найден sipClient в WebPhone
+2025-08-26T18:00:39.102Z [INFO] ✅ userAgent успешно создан
+2025-08-26T18:00:39.102Z [INFO] 🔍 Структура WebPhone объекта:
+2025-08-26T18:00:39.102Z [INFO]    - webPhone: object
+2025-08-26T18:00:39.102Z [INFO]    - userAgent: object
+2025-08-26T18:00:39.102Z [INFO]    - userAgent.state: undefined
+2025-08-26T18:00:39.102Z [INFO]    - userAgent.isRegistered: undefined
+2025-08-26T18:00:39.102Z [INFO] 🔄 Запуск регистрации WebPhone...
+2025-08-26T18:00:39.102Z [INFO] 🔍 Доступные методы WebPhone:
+2025-08-26T18:00:39.102Z [INFO]    - webPhone.start: function
+2025-08-26T18:00:39.102Z [INFO]    - webPhone.register: undefined
+2025-08-26T18:00:39.102Z [INFO]    - webPhone.userAgent.start: function
+2025-08-26T18:00:39.102Z [INFO]    - webPhone.userAgent.register: function
+2025-08-26T18:00:39.102Z [INFO]    - webPhone.sipClient: object
+2025-08-26T18:00:39.987Z [INFO] ✅ WebPhone запущен через webPhone.start()
+2025-08-26T18:00:39.987Z [INFO] ✅ WebPhone успешно инициализирован
+2025-08-26T18:00:39.987Z [INFO] ✅ Переподключение успешно
+2025-08-26T18:00:41.987Z [INFO] 📊 Статус WebPhone после инициализации: {"webPhoneExists":true,"isRegistered":false,"userAgentExists":true,"sipClientExists":true,"activeCalls":0,"maxCalls":5,"userAgentState":"unknown","userAgentRegistered":"method_not_available"}
+2025-08-26T18:00:45.778Z [INFO] 🛑 Получен сигнал завершения...
+2025-08-26T18:00:45.778Z [INFO] 🛑 Завершение работы WebPhone Bridge...
+2025-08-26T18:00:46.479Z [INFO] ✅ WebPhone Bridge корректно завершен
+2025-08-26T18:02:20.778Z [INFO] 🎯 Запуск RingCentral WebPhone Bridge...
+2025-08-26T18:02:20.779Z [INFO] 📋 Конфигурация:
+2025-08-26T18:02:20.779Z [INFO]    Client ID: bXCZ510zNm...
+2025-08-26T18:02:20.779Z [INFO]    Server: https://platform.ringcentral.com
+2025-08-26T18:02:20.779Z [INFO]    Python Server: http://localhost:5000
+2025-08-26T18:02:20.779Z [INFO] 🚀 Инициализация RingCentral SDK...
+2025-08-26T18:02:20.780Z [INFO] 🔐 Авторизация через JWT токен...
+2025-08-26T18:02:21.426Z [INFO] ✅ RingCentral SDK успешно инициализирован
+2025-08-26T18:02:21.794Z [INFO] 📞 Расширение: 102
+2025-08-26T18:02:21.794Z [INFO] 👤 Пользователь: Alex Bakhronov
+2025-08-26T18:02:21.795Z [INFO] 📞 Инициализация WebPhone...
+2025-08-26T18:02:21.796Z [WARN] ⚠️ Не удалось определить версию WebPhone SDK
+2025-08-26T18:02:21.796Z [INFO] 🔧 WebPhone конструктор: function
+2025-08-26T18:02:21.796Z [INFO] 🔧 WebPhone прототип: 
+2025-08-26T18:02:21.796Z [INFO] 🔍 Получение SIP данных для WebPhone...
+2025-08-26T18:02:22.209Z [INFO] ✅ SIP данные получены успешно
+2025-08-26T18:02:22.209Z [INFO] 🔧 SIP Username: 15135725833*102
+2025-08-26T18:02:22.210Z [INFO] 🔧 SIP Domain: sip.ringcentral.com
+2025-08-26T18:02:22.210Z [INFO] 🔧 SIP Proxy: sip232-1111.ringcentral.com:8083
+2025-08-26T18:02:22.210Z [INFO] 🔍 Структура sipInfo:
+2025-08-26T18:02:22.210Z [INFO] 🔧 Конфигурация WebPhone:
+2025-08-26T18:02:22.210Z [INFO] ✅ Создаем WebPhone с полными SIP данными...
+2025-08-26T18:02:22.210Z [INFO] 🔧 WebPhone опции:
+2025-08-26T18:02:22.217Z [INFO] 🔍 Диагностика WebPhone объекта:
+2025-08-26T18:02:22.218Z [INFO]    - webPhone: object
+2025-08-26T18:02:22.218Z [INFO]    - webPhone keys: listeners, tempListeners, sipInfo, sipClient, deviceManager, callSessions, autoAnswer, options, disposed
+2025-08-26T18:02:22.218Z [INFO] ✅ Найден sipClient в WebPhone
+2025-08-26T18:02:22.218Z [INFO] 🔍 sipClient свойства: listeners, tempListeners, disposed, wsc, sipInfo, instanceId, debug, timeoutHandle, useBackupOutboundProxy
+2025-08-26T18:02:22.218Z [INFO] ✅ userAgent успешно создан
+2025-08-26T18:02:22.218Z [INFO] 🔍 Структура WebPhone объекта:
+2025-08-26T18:02:22.218Z [INFO]    - webPhone: object
+2025-08-26T18:02:22.218Z [INFO]    - userAgent: object
+2025-08-26T18:02:22.218Z [INFO]    - userAgent.state: undefined
+2025-08-26T18:02:22.218Z [INFO]    - userAgent.isRegistered: undefined
+2025-08-26T18:02:22.218Z [INFO] 🔄 Запуск регистрации WebPhone...
+2025-08-26T18:02:22.218Z [INFO] 🔍 Доступные методы WebPhone:
+2025-08-26T18:02:22.218Z [INFO]    - webPhone.start: function
+2025-08-26T18:02:22.218Z [INFO]    - webPhone.register: undefined
+2025-08-26T18:02:22.218Z [INFO]    - webPhone.userAgent.start: function
+2025-08-26T18:02:22.218Z [INFO]    - webPhone.userAgent.register: function
+2025-08-26T18:02:22.218Z [INFO]    - webPhone.sipClient: object
+2025-08-26T18:02:23.084Z [INFO] ✅ WebPhone запущен через webPhone.start()
+2025-08-26T18:02:23.084Z [INFO] ✅ WebPhone успешно инициализирован
+2025-08-26T18:02:23.091Z [INFO] 🩺 Мониторинг здоровья запущен (интервал: 30000ms)
+2025-08-26T18:02:23.091Z [INFO] ✅ WebPhone Bridge успешно запущен и готов принимать звонки!
+2025-08-26T18:02:23.091Z [INFO] 🎯 Ожидание входящих звонков...
+2025-08-26T18:02:23.091Z [INFO] 🌐 WebSocket сервер запущен на порту 8081
+2025-08-26T18:02:25.084Z [INFO] 📊 Статус WebPhone после инициализации: {"webPhoneExists":true,"isRegistered":false,"userAgentExists":true,"sipClientExists":true,"activeCalls":0,"maxCalls":5,"userAgentState":"unknown","userAgentRegistered":"method_not_available"}
+2025-08-26T18:03:13.166Z [INFO] 🛑 Получен сигнал завершения...
+2025-08-26T18:03:13.167Z [INFO] 🛑 Завершение работы WebPhone Bridge...
+2025-08-26T18:03:13.598Z [INFO] ✅ WebPhone Bridge корректно завершен
+2025-08-26T18:03:35.997Z [INFO] 🎯 Запуск RingCentral WebPhone Bridge...
+2025-08-26T18:03:35.998Z [INFO] 📋 Конфигурация:
+2025-08-26T18:03:35.999Z [INFO]    Client ID: bXCZ510zNm...
+2025-08-26T18:03:35.999Z [INFO]    Server: https://platform.ringcentral.com
+2025-08-26T18:03:35.999Z [INFO]    Python Server: http://localhost:5000
+2025-08-26T18:03:35.999Z [INFO] 🚀 Инициализация RingCentral SDK...
+2025-08-26T18:03:36.000Z [INFO] 🔐 Авторизация через JWT токен...
+2025-08-26T18:03:36.673Z [INFO] ✅ RingCentral SDK успешно инициализирован
+2025-08-26T18:03:37.014Z [INFO] 📞 Расширение: 102
+2025-08-26T18:03:37.014Z [INFO] 👤 Пользователь: Alex Bakhronov
+2025-08-26T18:03:37.015Z [INFO] 📞 Инициализация WebPhone...
+2025-08-26T18:03:37.015Z [WARN] ⚠️ Не удалось определить версию WebPhone SDK
+2025-08-26T18:03:37.015Z [INFO] 🔧 WebPhone конструктор: function
+2025-08-26T18:03:37.015Z [INFO] 🔧 WebPhone прототип: 
+2025-08-26T18:03:37.015Z [INFO] 🔍 Получение SIP данных для WebPhone...
+2025-08-26T18:03:37.419Z [INFO] ✅ SIP данные получены успешно
+2025-08-26T18:03:37.419Z [INFO] 🔧 SIP Username: 15135725833*102
+2025-08-26T18:03:37.420Z [INFO] 🔧 SIP Domain: sip.ringcentral.com
+2025-08-26T18:03:37.420Z [INFO] 🔧 SIP Proxy: sip221-1111.ringcentral.com:8083
+2025-08-26T18:03:37.420Z [INFO] 🔍 Структура sipInfo:
+2025-08-26T18:03:37.420Z [INFO] 🔧 Конфигурация WebPhone:
+2025-08-26T18:03:37.420Z [INFO] ✅ Создаем WebPhone с полными SIP данными...
+2025-08-26T18:03:37.420Z [INFO] 🔧 WebPhone опции:
+2025-08-26T18:03:37.425Z [INFO] 🔍 Диагностика WebPhone объекта:
+2025-08-26T18:03:37.425Z [INFO]    - webPhone: object
+2025-08-26T18:03:37.425Z [INFO]    - webPhone keys: listeners, tempListeners, sipInfo, sipClient, deviceManager, callSessions, autoAnswer, options, disposed
+2025-08-26T18:03:37.425Z [INFO] ✅ Найден sipClient в WebPhone
+2025-08-26T18:03:37.425Z [INFO] 🔍 sipClient свойства: listeners, tempListeners, disposed, wsc, sipInfo, instanceId, debug, timeoutHandle, useBackupOutboundProxy
+2025-08-26T18:03:37.425Z [INFO] ✅ userAgent успешно создан
+2025-08-26T18:03:37.425Z [INFO] 🔍 Структура WebPhone объекта:
+2025-08-26T18:03:37.425Z [INFO]    - webPhone: object
+2025-08-26T18:03:37.425Z [INFO]    - userAgent: object
+2025-08-26T18:03:37.425Z [INFO]    - userAgent.state: undefined
+2025-08-26T18:03:37.425Z [INFO]    - userAgent.isRegistered: undefined
+2025-08-26T18:03:37.425Z [INFO] 🔄 Запуск регистрации WebPhone...
+2025-08-26T18:03:37.425Z [INFO] 🔍 Доступные методы WebPhone:
+2025-08-26T18:03:37.425Z [INFO]    - webPhone.start: function
+2025-08-26T18:03:37.425Z [INFO]    - webPhone.register: undefined
+2025-08-26T18:03:37.425Z [INFO]    - webPhone.userAgent.start: function
+2025-08-26T18:03:37.425Z [INFO]    - webPhone.userAgent.register: function
+2025-08-26T18:03:37.425Z [INFO]    - webPhone.sipClient: object
+2025-08-26T18:03:38.084Z [ERROR] ❌ Ошибка запуска WebPhone: Cannot read properties of undefined (reading 'match')
+2025-08-26T18:03:38.084Z [ERROR] ❌ Stack trace: TypeError: Cannot read properties of undefined (reading 'match')
+    at DefaultSipClient.register (/home/whoami/prj/voiceai/webphone-bridge/node_modules/ringcentral-web-phone/dist/cjs/sip-client.js:116:73)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async DefaultSipClient.start (/home/whoami/prj/voiceai/webphone-bridge/node_modules/ringcentral-web-phone/dist/cjs/sip-client.js:32:9)
+    at async WebPhone.start (/home/whoami/prj/voiceai/webphone-bridge/node_modules/ringcentral-web-phone/dist/cjs/index.js:94:9)
+    at async initializeWebPhone (/home/whoami/prj/voiceai/webphone-bridge/webphone_bridge.js:243:17)
+    at async main (/home/whoami/prj/voiceai/webphone-bridge/webphone_bridge.js:906:27)
+2025-08-26T18:03:38.084Z [INFO] ✅ WebPhone успешно инициализирован
+2025-08-26T18:03:38.091Z [INFO] 🩺 Мониторинг здоровья запущен (интервал: 30000ms)
+2025-08-26T18:03:38.091Z [INFO] ✅ WebPhone Bridge успешно запущен и готов принимать звонки!
+2025-08-26T18:03:38.092Z [INFO] 🎯 Ожидание входящих звонков...
+2025-08-26T18:03:38.092Z [INFO] 🌐 WebSocket сервер запущен на порту 8081
+2025-08-26T18:03:46.071Z [INFO] 🛑 Получен сигнал завершения...
+2025-08-26T18:03:46.072Z [INFO] 🛑 Завершение работы WebPhone Bridge...
+2025-08-26T18:03:46.207Z [INFO] ✅ WebPhone Bridge корректно завершен

@@ -62,6 +62,7 @@ let isRunning = false;
 let reconnectAttempts = 0;
 let healthCheckTimer = null;
 let lastHealthCheck = null;
+let isWebPhoneRegistered = false; // Флаг состояния регистрации WebPhone
 
 /**
  * Инициализация RingCentral SDK
@@ -106,6 +107,23 @@ async function initializeRingCentral() {
 async function initializeWebPhone() {
     logger.info('📞 Инициализация WebPhone...');
     
+    // Проверяем версию WebPhone SDK
+    try {
+        const webPhonePackage = require('ringcentral-web-phone/package.json');
+        logger.info(`📦 WebPhone SDK версия: ${webPhonePackage.version}`);
+    } catch (error) {
+        logger.warn('⚠️ Не удалось определить версию WebPhone SDK');
+    }
+    
+    // Проверяем доступность WebPhone SDK
+    if (!WebPhone) {
+        logger.error('❌ WebPhone SDK не загружен');
+        return false;
+    }
+    
+    logger.info(`🔧 WebPhone конструктор: ${typeof WebPhone}`);
+    logger.info(`🔧 WebPhone прототип: ${Object.keys(WebPhone.prototype || {}).join(', ')}`);
+    
     try {
         // Получаем полные SIP данные
         const sipProvisionData = await getSipProvisionData();
@@ -113,7 +131,19 @@ async function initializeWebPhone() {
         // Извлекаем sipInfo из данных
         const sipInfo = sipProvisionData.sipInfo[0];
         
-        // Создаем WebPhone инстанс с правильной структурой данных
+        // Проверяем структуру sipInfo
+        logger.info('🔍 Структура sipInfo:', JSON.stringify(sipInfo, null, 2));
+        
+        // Проверяем обязательные поля
+        const requiredFields = ['username', 'password', 'domain', 'outboundProxy'];
+        const missingFields = requiredFields.filter(field => !sipInfo[field]);
+        
+        if (missingFields.length > 0) {
+            logger.error(`❌ Отсутствуют обязательные поля в sipInfo: ${missingFields.join(', ')}`);
+            throw new Error(`Неполные SIP данные: отсутствуют ${missingFields.join(', ')}`);
+        }
+        
+        // Создаем WebPhone инстанс с минимальной конфигурацией
         const webPhoneConfig = {
             logLevel: 1, // 0 = Trace, 1 = Debug, 2 = Info, 3 = Warn, 4 = Error
             audioHelper: {
@@ -128,10 +158,7 @@ async function initializeWebPhone() {
                     audio: true,
                     video: false
                 }
-            },
-            // Настройки для автоматического приема звонков
-            autoAnswer: true,
-            enableQos: true
+            }
         };
         
         logger.info('🔧 Конфигурация WebPhone:', JSON.stringify(webPhoneConfig, null, 2));
@@ -143,10 +170,59 @@ async function initializeWebPhone() {
         // WebPhone конструктор ожидает объект с полем sipInfo
         const webPhoneOptions = {
             sipInfo: sipInfo,
-            ...webPhoneConfig
+            logLevel: webPhoneConfig.logLevel,
+            audioHelper: webPhoneConfig.audioHelper,
+            media: webPhoneConfig.media
         };
         
-        webPhone = new WebPhone(webPhoneOptions);
+        logger.info('🔧 WebPhone опции:', JSON.stringify(webPhoneOptions, null, 2));
+        
+        // Попробуем создать WebPhone с правильной структурой
+        try {
+            webPhone = new WebPhone(webPhoneOptions);
+        } catch (error) {
+            logger.error(`❌ Ошибка создания WebPhone: ${error.message}`);
+            // Попробуем альтернативный способ
+            logger.info('🔄 Попытка альтернативной инициализации WebPhone...');
+            webPhone = new WebPhone({
+                sipInfo: sipInfo,
+                logLevel: 1
+            });
+        }
+        
+        // Проверяем структуру WebPhone объекта
+        logger.info('🔍 Диагностика WebPhone объекта:');
+        logger.info(`   - webPhone: ${typeof webPhone}`);
+        logger.info(`   - webPhone keys: ${Object.keys(webPhone || {}).join(', ')}`);
+        
+        // В новой версии SDK userAgent может быть в sipClient
+        if (webPhone.sipClient) {
+            logger.info('✅ Найден sipClient в WebPhone');
+            logger.info(`🔍 sipClient свойства: ${Object.keys(webPhone.sipClient).join(', ')}`);
+            webPhone.userAgent = webPhone.sipClient;
+        } else if (webPhone.userAgent) {
+            logger.info('✅ Найден userAgent в WebPhone');
+        } else {
+            logger.warn('⚠️ userAgent не найден, но WebPhone создан успешно');
+            // Создаем заглушку userAgent для совместимости
+            webPhone.userAgent = {
+                state: 'unknown',
+                isRegistered: () => false,
+                start: () => Promise.resolve(),
+                register: () => Promise.resolve(),
+                stop: () => Promise.resolve(),
+                unregister: () => Promise.resolve()
+            };
+        }
+        
+        logger.info('✅ userAgent успешно создан');
+        
+        // Диагностика структуры WebPhone
+        logger.info('🔍 Структура WebPhone объекта:');
+        logger.info(`   - webPhone: ${typeof webPhone}`);
+        logger.info(`   - userAgent: ${typeof webPhone.userAgent}`);
+        logger.info(`   - userAgent.state: ${webPhone.userAgent.state}`);
+        logger.info(`   - userAgent.isRegistered: ${typeof webPhone.userAgent.isRegistered}`);
         
         // Регистрация обработчиков событий
         setupWebPhoneEventHandlers();
@@ -154,19 +230,52 @@ async function initializeWebPhone() {
         // ДОБАВЬТЕ ЭТО: Принудительная регистрация
         logger.info('🔄 Запуск регистрации WebPhone...');
         try {
+            // Проверяем доступные методы
+            logger.info('🔍 Доступные методы WebPhone:');
+            logger.info(`   - webPhone.start: ${typeof webPhone.start}`);
+            logger.info(`   - webPhone.register: ${typeof webPhone.register}`);
+            logger.info(`   - webPhone.userAgent.start: ${typeof (webPhone.userAgent && webPhone.userAgent.start)}`);
+            logger.info(`   - webPhone.userAgent.register: ${typeof (webPhone.userAgent && webPhone.userAgent.register)}`);
+            logger.info(`   - webPhone.sipClient: ${typeof webPhone.sipClient}`);
+            
             // Попробуем разные способы запуска WebPhone
-            if (webPhone.userAgent && webPhone.userAgent.start) {
-                await webPhone.userAgent.start();
-                logger.info('✅ UserAgent запущен через userAgent.start()');
-            } else if (webPhone.start) {
+            if (webPhone.start) {
                 await webPhone.start();
                 logger.info('✅ WebPhone запущен через webPhone.start()');
             } else if (webPhone.register) {
                 await webPhone.register();
                 logger.info('✅ WebPhone зарегистрирован через webPhone.register()');
+            } else if (webPhone.userAgent && webPhone.userAgent.start) {
+                await webPhone.userAgent.start();
+                logger.info('✅ UserAgent запущен через userAgent.start()');
+            } else if (webPhone.userAgent && webPhone.userAgent.register) {
+                await webPhone.userAgent.register();
+                logger.info('✅ UserAgent зарегистрирован через userAgent.register()');
             } else {
                 logger.warn('⚠️ Не найден метод запуска WebPhone, ожидаем автоматической регистрации');
             }
+            
+            // Ждем немного и проверяем статус регистрации
+            setTimeout(() => {
+                const status = getWebPhoneStatus();
+                logger.info(`📊 Статус WebPhone после инициализации: ${JSON.stringify(status)}`);
+                
+                // Дополнительная диагностика sipClient
+                if (webPhone.sipClient) {
+                    logger.info('🔍 Дополнительная диагностика sipClient:');
+                    logger.info(`   - wsc: ${typeof webPhone.sipClient.wsc}`);
+                    logger.info(`   - disposed: ${webPhone.sipClient.disposed}`);
+                    logger.info(`   - instanceId: ${webPhone.sipClient.instanceId}`);
+                    logger.info(`   - timeoutHandle: ${webPhone.sipClient.timeoutHandle}`);
+                    
+                    // Проверяем WebSocket соединение
+                    if (webPhone.sipClient.wsc) {
+                        logger.info(`   - wsc.readyState: ${webPhone.sipClient.wsc.readyState}`);
+                        logger.info(`   - wsc.url: ${webPhone.sipClient.wsc.url}`);
+                    }
+                }
+            }, 2000);
+            
         } catch (error) {
             logger.error(`❌ Ошибка запуска WebPhone: ${error.message}`);
             logger.error(`❌ Stack trace: ${error.stack}`);
@@ -230,23 +339,69 @@ async function getSipProvisionData() {
 function setupWebPhoneEventHandlers() {
     // Событие попытки регистрации
     webPhone.on('registering', () => {
+        isWebPhoneRegistered = false;
         logger.info('🔄 WebPhone пытается зарегистрироваться...');
     });
     
     // Событие регистрации
     webPhone.on('registered', () => {
+        isWebPhoneRegistered = true;
         logger.info('✅ WebPhone зарегистрирован и готов принимать звонки');
+        logger.info('🎯 Система готова принимать входящие звонки!');
     });
     
     // Событие ошибки регистрации
     webPhone.on('registrationFailed', (error) => {
+        isWebPhoneRegistered = false;
         logger.error(`❌ Ошибка регистрации WebPhone: ${JSON.stringify(error, null, 2)}`);
+        
+        // Обработка специфических ошибок
+        if (error && error.response && error.response.statusCode === 408) {
+            logger.warn('⚠️ Обнаружена ошибка 408 (Request Timeout), попытка переподключения через 10 секунд...');
+            setTimeout(() => {
+                attemptReconnect();
+            }, 10000);
+        }
     });
+    
+    // Обработка таймаута sipClient
+    if (webPhone.sipClient) {
+        webPhone.sipClient.on('timeout', () => {
+            logger.warn('⏰ Таймаут sipClient соединения');
+            isWebPhoneRegistered = false;
+        });
+    }
     
     // Событие отключения
     webPhone.on('unregistered', () => {
+        isWebPhoneRegistered = false;
         logger.warn('⚠️ WebPhone отключен от SIP сервера');
     });
+    
+    // Изменение состояния
+    webPhone.on('stateChanged', (state) => {
+        logger.info(`🔄 WebPhone состояние изменилось: ${state}`);
+        if (state === 'Registered' || state === 'Connected') {
+            isWebPhoneRegistered = true;
+        } else if (state === 'Unregistered' || state === 'Disconnected') {
+            isWebPhoneRegistered = false;
+        }
+    });
+    
+    // WebSocket события sipClient
+    if (webPhone.sipClient && webPhone.sipClient.wsc) {
+        webPhone.sipClient.wsc.on('open', () => {
+            logger.info('🔌 WebSocket соединение sipClient открыто');
+        });
+        
+        webPhone.sipClient.wsc.on('close', () => {
+            logger.warn('🔌 WebSocket соединение sipClient закрыто');
+        });
+        
+        webPhone.sipClient.wsc.on('error', (error) => {
+            logger.error(`❌ WebSocket ошибка sipClient: ${error.message}`);
+        });
+    }
     
     // Общие ошибки
     webPhone.on('error', (error) => {
@@ -256,11 +411,20 @@ function setupWebPhoneEventHandlers() {
     // Событие подключения
     webPhone.on('connected', () => {
         logger.info('🔌 WebPhone подключен к SIP серверу');
+        // При подключении устанавливаем флаг регистрации
+        isWebPhoneRegistered = true;
+    });
+    
+    // Событие готовности
+    webPhone.on('ready', () => {
+        logger.info('✅ WebPhone готов к работе');
+        isWebPhoneRegistered = true;
     });
     
     // Событие отключения
     webPhone.on('disconnected', () => {
         logger.warn('🔌 WebPhone отключен от SIP сервера');
+        isWebPhoneRegistered = false;
     });
     
     // КРИТИЧНО: Обработчик входящих звонков
@@ -583,11 +747,18 @@ function startHealthCheck() {
                 lastHealthCheck = new Date();
                 
                 // Проверяем регистрацию WebPhone
-                if (webPhone && webPhone.isConnected()) {
+                const webPhoneStatus = getWebPhoneStatus();
+                if (webPhone && isWebPhoneRegistered) {
                     logger.debug('✅ WebPhone подключен и зарегистрирован');
                 } else {
-                    logger.warn('⚠️ WebPhone не зарегистрирован, попытка переподключения...');
-                    await attemptReconnect();
+                    // Даем больше времени на регистрацию перед переподключением
+                    const timeSinceStart = Date.now() - (lastHealthCheck || Date.now());
+                    if (timeSinceStart > 60000) { // 1 минута
+                        logger.warn(`⚠️ WebPhone не зарегистрирован более 1 минуты (статус: ${JSON.stringify(webPhoneStatus)}), попытка переподключения...`);
+                        await attemptReconnect();
+                    } else {
+                        logger.debug(`⏳ WebPhone еще не зарегистрирован, ожидаем... (статус: ${JSON.stringify(webPhoneStatus)})`);
+                    }
                 }
                 
                 // Проверяем Python сервер
@@ -617,6 +788,50 @@ function startHealthCheck() {
 }
 
 /**
+ * Получение статуса WebPhone
+ */
+function getWebPhoneStatus() {
+    const status = {
+        webPhoneExists: !!webPhone,
+        isRegistered: isWebPhoneRegistered,
+        userAgentExists: !!(webPhone && webPhone.userAgent),
+        sipClientExists: !!(webPhone && webPhone.sipClient),
+        activeCalls: activeCalls.size,
+        maxCalls: config.maxConcurrentCalls
+    };
+    
+    if (webPhone && webPhone.userAgent) {
+        try {
+            status.userAgentState = webPhone.userAgent.state || 'unknown';
+            status.userAgentRegistered = webPhone.userAgent.isRegistered ? webPhone.userAgent.isRegistered() : 'method_not_available';
+        } catch (error) {
+            status.userAgentError = error.message;
+        }
+    } else if (webPhone && webPhone.sipClient) {
+        try {
+            status.sipClientState = webPhone.sipClient.state || 'unknown';
+            status.sipClientRegistered = webPhone.sipClient.isRegistered ? webPhone.sipClient.isRegistered() : 'method_not_available';
+            
+            // Проверяем дополнительные свойства sipClient
+            if (webPhone.sipClient.registered) {
+                status.sipClientRegistered = webPhone.sipClient.registered;
+            }
+            if (webPhone.sipClient.connected) {
+                status.sipClientConnected = webPhone.sipClient.connected;
+            }
+        } catch (error) {
+            status.sipClientError = error.message;
+        }
+    } else {
+        status.userAgentState = 'not_available';
+        status.userAgentRegistered = 'not_available';
+        status.userAgentError = 'userAgent не инициализирован';
+    }
+    
+    return status;
+}
+
+/**
  * Попытка переподключения
  */
 async function attemptReconnect() {
@@ -631,7 +846,19 @@ async function attemptReconnect() {
     try {
         // Останавливаем текущие соединения
         if (webPhone) {
-            webPhone.disconnect();
+            try {
+                if (webPhone.stop) {
+                    await webPhone.stop();
+                } else if (webPhone.userAgent && webPhone.userAgent.stop) {
+                    await webPhone.userAgent.stop();
+                } else if (webPhone.userAgent && webPhone.userAgent.unregister) {
+                    await webPhone.userAgent.unregister();
+                } else if (webPhone.sipClient && webPhone.sipClient.stop) {
+                    await webPhone.sipClient.stop();
+                }
+            } catch (error) {
+                logger.error(`❌ Ошибка отключения WebPhone: ${error.message}`);
+            }
         }
         
         // Ждем перед переподключением
@@ -690,6 +917,7 @@ async function main() {
     
     // Устанавливаем флаг готовности
     isRunning = true;
+    lastHealthCheck = Date.now();
     
     logger.info('✅ WebPhone Bridge успешно запущен и готов принимать звонки!');
     logger.info('🎯 Ожидание входящих звонков...');
@@ -697,19 +925,25 @@ async function main() {
     // Обработка завершения процесса
     process.on('SIGINT', () => {
         logger.info('🛑 Получен сигнал завершения...');
-        shutdown();
+        shutdown().catch(error => {
+            logger.error(`❌ Ошибка при завершении: ${error.message}`);
+            process.exit(1);
+        });
     });
     
     process.on('SIGTERM', () => {
         logger.info('🛑 Получен сигнал завершения...');
-        shutdown();
+        shutdown().catch(error => {
+            logger.error(`❌ Ошибка при завершении: ${error.message}`);
+            process.exit(1);
+        });
     });
 }
 
 /**
  * Корректное завершение работы
  */
-function shutdown() {
+async function shutdown() {
     logger.info('🛑 Завершение работы WebPhone Bridge...');
     
     isRunning = false;
@@ -736,7 +970,15 @@ function shutdown() {
     // Отключаем WebPhone
     if (webPhone) {
         try {
-            webPhone.disconnect();
+            if (webPhone.stop) {
+                await webPhone.stop();
+            } else if (webPhone.userAgent && webPhone.userAgent.stop) {
+                await webPhone.userAgent.stop();
+            } else if (webPhone.userAgent && webPhone.userAgent.unregister) {
+                await webPhone.userAgent.unregister();
+            } else if (webPhone.sipClient && webPhone.sipClient.stop) {
+                await webPhone.sipClient.stop();
+            }
         } catch (error) {
             logger.error(`❌ Ошибка отключения WebPhone: ${error.message}`);
         }
