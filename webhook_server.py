@@ -65,7 +65,26 @@ def async_synthesize(*args, **kwargs):
 
 class MockAudioStreamHandler:
     def __init__(self):
-        pass
+        self.active_streams = {}
+        self.is_running = False
+        
+    async def start_websocket_server(self, port: int = 8080):
+        """Mock метод для запуска WebSocket сервера"""
+        logger.info(f"🧪 MOCK: WebSocket сервер заглушка на порту {port}")
+        self.is_running = True
+        # В mock версии просто имитируем работу сервера
+        while self.is_running:
+            await asyncio.sleep(1)
+            
+    def stop_server(self):
+        """Остановка mock сервера"""
+        self.is_running = False
+        logger.info("🧪 MOCK: WebSocket сервер остановлен")
+        
+    async def handle_call_audio(self, call_id: str, audio_data: bytes):
+        """Mock обработка аудио данных"""
+        logger.info(f"🧪 MOCK: Обработка аудио для звонка {call_id}")
+        return "Mock AI ответ"
 
 audio_stream_handler = MockAudioStreamHandler()
 
@@ -568,13 +587,13 @@ def _handle_telephony_session(session_data: Dict[str, Any], webhook_data: Dict[s
                 thread.start()
                 logger.info(f"📋 Запущен VoiceAIEngine для звонка {call_data['callId']}")
                 
-                # КРИТИЧНО: Запускаем автоматический ответ на звонок через Call Control API
-                # Добавляем webhook данные в call_data
+                # ✅ WebPhone автоматически принимает звонки через SIP, REST API ответ не нужен
+                # Добавляем webhook данные в call_data для полноты информации
                 call_data['webhook_data'] = webhook_data
-                answer_thread = threading.Thread(target=_run_answer_call, args=(call_data,))
-                answer_thread.daemon = True
-                answer_thread.start()
-                logger.info(f"📞 Запущен автоматический ответ на звонок {call_data['callId']}")
+                logger.info(f"📞 WebPhone автоматически обработает звонок {call_data['callId']} (REST API ответ не требуется)")
+                
+                # ВНИМАНИЕ: Убрали дублирующий REST API ответ, так как WebPhone с autoAnswer=true
+                # уже принимает звонки автоматически через SIP протокол
                 
             elif direction == 'Inbound' and status.get('code') in ['Proceeding', 'Setup', 'Alerting']:
                 # Логируем входящие звонки в других состояниях без обработки  
