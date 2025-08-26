@@ -18,13 +18,13 @@
   "author": "Prime Cargo Logistics",
   "license": "MIT",
   "dependencies": {
-    "@ringcentral/sdk": "^4.9.0",
-    "ringcentral-web-phone": "^1.0.0",
-    "axios": "^1.6.2",
-    "ws": "^8.14.2",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "winston": "^3.11.0",
+    "@ringcentral/sdk": "^5.0.5",
+    "ringcentral-web-phone": "^2.2.7",
+    "axios": "^1.7.2",
+    "ws": "^8.18.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "winston": "^3.13.0",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

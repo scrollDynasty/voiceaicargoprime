@@ -40,10 +40,32 @@ cd ..
 run_background() {
     local name=$1
     local command=$2
+    local dir=$3
+    
     echo "▶️  Запуск $name..."
-    $command > logs/$name.log 2>&1 &
-    echo $! > logs/$name.pid
-    echo "✅ $name запущен (PID: $(cat logs/$name.pid))"
+    
+    if [ -n "$dir" ]; then
+        cd "$dir"
+    fi
+    
+    $command > ../logs/$name.log 2>&1 &
+    local pid=$!
+    echo $pid > ../logs/$name.pid
+    
+    if [ -n "$dir" ]; then
+        cd ..
+    fi
+    
+    echo "✅ $name запущен (PID: $pid)"
+    
+    # Небольшая проверка что процесс запустился
+    sleep 1
+    if kill -0 $pid 2>/dev/null; then
+        echo "  ✓ Процесс активен"
+    else
+        echo "  ❌ Процесс завершился неожиданно"
+        return 1
+    fi
 }
 
 # Запуск Python сервера
@@ -62,9 +84,7 @@ else
 fi
 
 # Запуск WebPhone Bridge
-cd webphone-bridge
-run_background "webphone-bridge" "node webphone_bridge.js"
-cd ..
+run_background "webphone-bridge" "node webphone_bridge.js" "webphone-bridge"
 
 # Ждем запуска WebPhone
 echo "⏳ Ожидание запуска WebPhone Bridge..."
