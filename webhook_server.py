@@ -9,12 +9,13 @@ import asyncio
 import hmac
 import hashlib
 import base64
+import os
+import time
 from datetime import datetime
 from typing import Dict, Any, Optional
 from flask import Flask, request, jsonify, Response, make_response
 from flask_cors import CORS
 import threading
-import time
 from functools import wraps
 
 from voice_ai_engine import voice_ai_engine
@@ -360,7 +361,8 @@ def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
             
             logger.info(f"Обрабатываем party: direction={direction}, status={status}, party_id={party_id}")
             
-            # Проверяем входящий звонок ТОЛЬКО в состоянии "Ringing" для автоматического ответа
+            # ✅ Улучшенная логика обработки входящих звонков
+            # Обрабатываем звонки в состоянии "Ringing" для автоматического ответа
             if direction == 'Inbound' and status.get('code') == 'Ringing':
                 logger.info(f"🔔 Обнаружен входящий звонок в состоянии RINGING: session={telephony_session_id}, party={party_id}")
                 
@@ -373,10 +375,15 @@ def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
                     "to": party.get('to', {}),
                     "direction": direction,
                     "status": status,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "webhook"  # Явно указываем источник
                 }
                 
-                logger.info(f"📞 Подготовлены данные звонка для автоматического ответа: {call_data}")
+                logger.info(f"📞 Подготовлены данные звонка для автоматического ответа:")
+                logger.info(f"   Session ID: {telephony_session_id}")
+                logger.info(f"   Party ID: {party_id}")
+                logger.info(f"   От: {party.get('from', {}).get('phoneNumber', 'Unknown')}")
+                logger.info(f"   К: {party.get('to', {}).get('phoneNumber', 'Unknown')}")
                 
                 # Сохраняем информацию о звонке
                 with call_lock:
@@ -387,9 +394,25 @@ def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
                 thread.daemon = True
                 thread.start()
                 logger.info(f"📋 Запущен фоновый поток для обработки звонка {call_data['callId']}")
+                
             elif direction == 'Inbound' and status.get('code') in ['Proceeding', 'Setup', 'Alerting']:
                 # Логируем входящие звонки в других состояниях без обработки
                 logger.info(f"📱 Входящий звонок в состоянии {status.get('code')} (ожидаем Ringing): session={telephony_session_id}, party={party_id}")
+                
+            elif direction == 'Inbound' and status.get('code') in ['Answered', 'Connected']:
+                # Логируем когда звонок уже отвечен
+                logger.info(f"📞 Входящий звонок уже отвечен в состоянии {status.get('code')}: session={telephony_session_id}, party={party_id}")
+                
+            elif direction == 'Inbound' and status.get('code') in ['Disconnected', 'Gone', 'Cancelled']:
+                # Логируем завершенные звонки
+                logger.info(f"📞 Входящий звонок завершен в состоянии {status.get('code')}: session={telephony_session_id}, party={party_id}")
+                
+                # Удаляем из активных звонков
+                call_id = f"{telephony_session_id}_{party_id}"
+                with call_lock:
+                    if call_id in active_calls:
+                        del active_calls[call_id]
+                        logger.info(f"🗑️ Звонок {call_id} удален из активных")
             else:
                 if direction == 'Inbound':
                     logger.info(f"⏭️ Пропускаем входящий звонок со статусом {status.get('code')} (не подходит для ответа)")
@@ -536,7 +559,7 @@ def hangup_call(call_id: str):
         
         # Завершаем звонок через RingCentral API
         try:
-            make_ringcentral_request(
+            make_request(
                 'DELETE',
                 f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{call_data["telephonySessionId"]}/parties/{call_data["partyId"]}'
             )
@@ -579,10 +602,75 @@ def create_subscription():
         logger.error(f"Ошибка создания подписки: {e}")
         return jsonify({"error": str(e)}), 500
 
+async def _cleanup_old_subscriptions():
+    """Очистка старых подписок на тот же webhook URL"""
+    try:
+        from ringcentral_auth import make_request
+        
+        # Получаем все подписки
+        response = make_request('GET', '/restapi/v1.0/subscription')
+        if not response:
+            return
+        
+        subscriptions = response.get('records', [])
+        target_url = Config.RINGCENTRAL['webhook_url']
+        
+        # Находим подписки на тот же URL
+        old_subscriptions = []
+        for sub in subscriptions:
+            sub_url = sub.get('deliveryMode', {}).get('address')
+            if sub_url == target_url:
+                old_subscriptions.append(sub)
+        
+        if len(old_subscriptions) > 1:
+            logger.info(f"🧹 Найдено {len(old_subscriptions)} старых подписок, удаляем...")
+            
+            # Сортируем по времени создания (новые первыми)
+            old_subscriptions.sort(key=lambda x: x.get('creationTime', ''), reverse=True)
+            
+            # Удаляем все кроме самой новой
+            for sub in old_subscriptions[1:]:
+                sub_id = sub.get('id')
+                logger.info(f"🗑️  Удаляем старую подписку: {sub_id}")
+                try:
+                    make_request('DELETE', f'/restapi/v1.0/subscription/{sub_id}')
+                    logger.info(f"✅ Подписка {sub_id} удалена")
+                except Exception as e:
+                    logger.warning(f"⚠️  Не удалось удалить подписку {sub_id}: {e}")
+        elif len(old_subscriptions) == 1:
+            logger.info("✅ Найдена одна подписка, оставляем")
+        else:
+            logger.info("📋 Старых подписок не найдено")
+            
+    except Exception as e:
+        logger.error(f"Ошибка очистки старых подписок: {e}")
+
 async def _create_webhook_subscription():
     """Создать webhook подписку для telephony/sessions событий"""
     try:
-        # Простой фильтр событий для тестирования
+        from ringcentral_auth import make_request
+        
+        # Сначала очищаем старые подписки
+        await _cleanup_old_subscriptions()
+        
+        # Проверяем, есть ли уже активная подписка
+        response = make_request('GET', '/restapi/v1.0/subscription')
+        if response:
+            subscriptions = response.get('records', [])
+            target_url = Config.RINGCENTRAL['webhook_url']
+            
+            # Ищем активную подписку на тот же URL
+            for sub in subscriptions:
+                sub_url = sub.get('deliveryMode', {}).get('address')
+                if sub_url == target_url and sub.get('status') == 'Active':
+                    logger.info(f"✅ Найдена активная подписка: {sub.get('id')}")
+                    return sub
+        
+        # Если активной подписки нет, создаем новую
+        logger.info(f"Создаем новую webhook подписку на {Config.RINGCENTRAL['webhook_url']}")
+        
+        # ✅ Правильный фильтр событий согласно документации RingCentral
+        # Wildcard фильтры не поддерживаются, используем только базовый
         event_filters = [
             '/restapi/v1.0/account/~/extension/~/telephony/sessions'
         ]
@@ -594,8 +682,6 @@ async def _create_webhook_subscription():
             'encryption': False  # Или True с encryptionKey если нужна шифрация
         }
         
-        logger.info(f"Создаем webhook подписку на {Config.RINGCENTRAL['webhook_url']}")
-        
         # Подготавливаем данные для подписки
         subscription_data = {
             'eventFilters': event_filters,
@@ -606,7 +692,6 @@ async def _create_webhook_subscription():
         logger.info(f"📋 Данные подписки: {json.dumps(subscription_data, indent=2)}")
         
         # Создаем подписку через новую систему авторизации
-        from ringcentral_auth import make_request
         subscription_info = make_request('POST', '/restapi/v1.0/subscription', subscription_data)
         
         logger.info(f"Webhook подписка создана: {subscription_info['id']}")
@@ -724,7 +809,7 @@ def handle_incoming_call():
 
 def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[str, Any]) -> bool:
     """
-    Автоматически принять звонок через Call Control API
+    Автоматически принять звонок через RingCentral Call Control API
     
     Args:
         session_id: ID телефонной сессии
@@ -737,13 +822,11 @@ def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[
     try:
         logger.info(f"🔄 Попытка автоматически ответить на звонок: session={session_id}, party={party_id}")
         
-        # Отвечаем на звонок через RingCentral Call Control API
+        # ✅ Правильный endpoint для ответа на звонок
+        # Документация: https://developers.ringcentral.com/api-reference/Call-Control/answerCall
         response = make_request(
             'POST',
-            f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{session_id}/parties/{party_id}/answer',
-            {
-                'deviceId': Config.RINGCENTRAL.get('device_id')  # Опционально, если есть specific device
-            }
+            f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{session_id}/parties/{party_id}/answer'
         )
         
         logger.info(f"✅ Звонок успешно принят! Response: {response}")
@@ -757,7 +840,7 @@ def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[
 
 def play_audio_to_call(session_id: str, party_id: str, audio_data: bytes) -> bool:
     """
-    Воспроизвести audio в активном звонке
+    Воспроизвести audio в активном звонке через RingCentral Call Control API
     
     Args:
         session_id: ID телефонной сессии
@@ -770,45 +853,30 @@ def play_audio_to_call(session_id: str, party_id: str, audio_data: bytes) -> boo
     try:
         logger.info(f"🔊 Попытка воспроизвести аудио в звонке: session={session_id}, party={party_id}")
         
-        # Сохраняем аудио во временный файл
-        import tempfile
-        import os
+        # ✅ Правильный endpoint для воспроизведения аудио
+        # Документация: https://developers.ringcentral.com/api-reference/Call-Control/playAudio
+        # RingCentral поддерживает только base64 encoded audio data
         
-        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
-            tmp_file.write(audio_data)
-            tmp_file_path = tmp_file.name
+        import base64
         
-        try:
-            # Загружаем аудио файл на RingCentral сервер
-            with open(tmp_file_path, 'rb') as audio_file:
-                upload_response = make_request(
-                    'POST',
-                    '/restapi/v1.0/account/~/media',
-                    data=None,
-                    files={'media': ('greeting.wav', audio_file, 'audio/wav')}
-                )
-                
-            media_id = upload_response.get('id')
-            logger.info(f"📤 Аудио загружено на сервер, media_id: {media_id}")
-            
-            # Воспроизводим аудио в звонке
-            play_response = make_request(
-                'POST',
-                f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{session_id}/parties/{party_id}/play',
-                {
-                    'mediaId': media_id,
-                    'playMode': 'play',
-                    'interrupt': True
-                }
-            )
-            
-            logger.info(f"✅ Аудио успешно воспроизведено в звонке!")
-            return True
-            
-        finally:
-            # Удаляем временный файл
-            if os.path.exists(tmp_file_path):
-                os.unlink(tmp_file_path)
+        # Кодируем аудио в base64
+        audio_base64 = base64.b64encode(audio_data).decode('utf-8')
+        
+        # Воспроизводим аудио в звонке
+        play_data = {
+            'audioData': audio_base64,
+            'playMode': 'play'
+        }
+        
+        logger.info(f"📤 Отправляем аудио данные: {len(audio_base64)} символов base64")
+        play_response = make_request(
+            'POST',
+            f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{session_id}/parties/{party_id}/play',
+            play_data
+        )
+        
+        logger.info(f"✅ Аудио успешно воспроизведено в звонке!")
+        return True
         
     except Exception as e:
         logger.error(f"❌ Ошибка при воспроизведении аудио: {str(e)}")
@@ -833,38 +901,53 @@ def start_ai_conversation(call_data: Dict[str, Any]):
         # Генерируем приветствие
         greeting_text = "Hi there! Welcome to Prime Cargo Logistics! I'm your AI assistant, and I'm here to help you with tracking shipments, scheduling pickups, or any other logistics needs. How can I assist you today?"
         
-        # Создаем TTS аудио асинхронно
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # ✅ Правильная обработка асинхронности в потоке
+        def generate_and_play_audio():
+            try:
+                # Создаем новый event loop для этого потока
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                try:
+                    # Генерируем TTS аудио
+                    audio_data = loop.run_until_complete(async_synthesize(greeting_text))
+                    logger.info(f"✅ Приветствие сгенерировано: {len(audio_data)} байт")
+                    
+                    # Сохраняем аудио для отладки
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"recordings/greeting_{caller_number}_{timestamp}.wav"
+                    os.makedirs("recordings", exist_ok=True)
+                    with open(filename, "wb") as f:
+                        f.write(audio_data)
+                    logger.info(f"💾 Аудио сохранено в {filename}")
+                    
+                    # Воспроизводим аудио в звонке
+                    if play_audio_to_call(session_id, party_id, audio_data):
+                        logger.info("✅ Приветствие воспроизведено, ожидаем ответ пользователя...")
+                        
+                        # TODO: Здесь нужно реализовать:
+                        # 1. Получение audio stream от пользователя
+                        # 2. Распознавание речи (STT)
+                        # 3. Обработка через LLM
+                        # 4. Генерация ответа (TTS)
+                        # 5. Воспроизведение ответа
+                        
+                    else:
+                        logger.error("❌ Не удалось воспроизвести приветствие")
+                        
+                finally:
+                    loop.close()
+                    
+            except Exception as e:
+                logger.error(f"❌ Ошибка в generate_and_play_audio: {str(e)}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
         
-        try:
-            audio_data = loop.run_until_complete(async_synthesize(greeting_text))
-            logger.info(f"✅ Приветствие сгенерировано: {len(audio_data)} байт")
-            
-            # Сохраняем аудио для отладки
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"recordings/greeting_{caller_number}_{timestamp}.wav"
-            with open(filename, "wb") as f:
-                f.write(audio_data)
-            logger.info(f"💾 Аудио сохранено в {filename}")
-            
-            # Воспроизводим аудио в звонке
-            if play_audio_to_call(session_id, party_id, audio_data):
-                logger.info("✅ Приветствие воспроизведено, ожидаем ответ пользователя...")
-                
-                # TODO: Здесь нужно реализовать:
-                # 1. Получение audio stream от пользователя
-                # 2. Распознавание речи (STT)
-                # 3. Обработка через LLM
-                # 4. Генерация ответа (TTS)
-                # 5. Воспроизведение ответа
-                
-            else:
-                logger.error("❌ Не удалось воспроизвести приветствие")
-                
-        finally:
-            loop.close()
+        # Запускаем в отдельном потоке
+        import threading
+        thread = threading.Thread(target=generate_and_play_audio)
+        thread.daemon = True
+        thread.start()
         
     except Exception as e:
         logger.error(f"❌ Ошибка AI разговора: {str(e)}")
@@ -902,6 +985,34 @@ def process_call(call_data: Dict[str, Any]):
             # Генерируем приветствие для демонстрации
             greeting = f"Hi {name}! Welcome to Prime Cargo Logistics! I'm here to help you with anything you need today! How can I assist you?"
             
+            # ✅ Правильная обработка асинхронности для External App
+            def generate_external_audio():
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        audio_file = loop.run_until_complete(async_synthesize(greeting))
+                        logger.info(f"✅ Приветствие сгенерировано: {len(audio_file)} байт аудио")
+                        
+                        # Сохраняем аудио в файл для демонстрации
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        filename = f"recordings/external_call_{timestamp}.wav"
+                        os.makedirs("recordings", exist_ok=True)
+                        with open(filename, "wb") as f:
+                            f.write(audio_file)
+                        logger.info(f"💾 Аудио сохранено в {filename}")
+                        
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    logger.error(f"❌ Ошибка генерации аудио для External App: {e}")
+            
+            # Запускаем в отдельном потоке
+            import threading
+            thread = threading.Thread(target=generate_external_audio)
+            thread.daemon = True
+            thread.start()
+            
         else:
             # Звонок от webhook (есть telephony session ID)
             telephony_session_id = call_data.get('telephonySessionId')
@@ -916,57 +1027,15 @@ def process_call(call_data: Dict[str, Any]):
             # 1. Автоматически отвечаем на звонок
             if telephony_session_id and party_id:
                 if answer_call_automatically(telephony_session_id, party_id, caller_info):
-                    # Небольшая задержка перед началом разговора
-                    time.sleep(0.5)
+                    logger.info("✅ Звонок принят, запускаем AI разговор...")
                     
                     # 2. Запускаем AI разговор
                     start_ai_conversation(call_data)
                     return
                 else:
                     logger.error("❌ Не удалось автоматически ответить на звонок")
-            
-            # Fallback - генерируем приветствие локально
-            greeting = "Hi there! Welcome to Prime Cargo Logistics! I'm here to help you with anything you need today! How can I assist you?"
-        
-        # 2. Генерируем приветствие
-        logger.info("🎵 Генерируем TTS приветствие...")
-        
-        # Создаем TTS аудио
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            audio_file = loop.run_until_complete(async_synthesize(greeting))
-            logger.info(f"✅ Приветствие сгенерировано: {len(audio_file)} байт аудио")
-        finally:
-            loop.close()
-        
-        # 3. Воспроизводим аудио в звонке (только для webhook звонков)
-        if source == 'webhook' and telephony_session_id and party_id and audio_file:
-            try:
-                logger.info("🔊 Отправляем аудио в звонок...")
-                # Отправляем аудио в звонок
-                make_request(
-                    'POST',
-                    f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{telephony_session_id}/parties/{party_id}/play',
-                    {
-                        'audioFile': audio_file,
-                        'playMode': 'play'
-                    }
-                )
-                logger.info("🔊 Аудио отправлено в звонок")
-            except Exception as e:
-                logger.error(f"❌ Ошибка воспроизведения аудио: {e}")
-        elif source == 'external_app':
-            logger.info("📝 External App звонок - аудио сохранено для демонстрации")
-            # Сохраняем аудио в файл для демонстрации
-            import os
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"recordings/external_call_{timestamp}.wav"
-            os.makedirs("recordings", exist_ok=True)
-            with open(filename, "wb") as f:
-                f.write(audio_file)
-            logger.info(f"💾 Аудио сохранено в {filename}")
+            else:
+                logger.error("❌ Отсутствуют telephonySessionId или partyId")
         
         logger.info("✅ Обработка звонка завершена")
         

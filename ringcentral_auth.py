@@ -257,8 +257,11 @@ class RingCentralAuth:
             elif method.upper() == 'POST':
                 if files:
                     response = requests.post(url, headers=headers, files=files, data=data)
-                else:
+                elif isinstance(data, dict):
                     response = requests.post(url, headers=headers, json=data)
+                else:
+                    # Для не-JSON данных (например, bytes)
+                    response = requests.post(url, headers=headers, data=data)
             elif method.upper() == 'PUT':
                 response = requests.put(url, headers=headers, json=data)
             elif method.upper() == 'DELETE':
