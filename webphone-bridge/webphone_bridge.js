@@ -12,6 +12,9 @@ const winston = require('winston');
 const { v4: uuidv4 } = require('uuid');
 const express = require('express');
 
+// WebSocket полифилл для Node.js
+global.WebSocket = WebSocket;
+
 // Настройка логирования
 const logger = winston.createLogger({
     level: process.env.LOG_LEVEL || 'info',
@@ -31,11 +34,11 @@ const logger = winston.createLogger({
 const config = {
     clientId: process.env.RINGCENTRAL_CLIENT_ID || 'bXCZ510zNmybxAUXGIZruT',
     clientSecret: process.env.RINGCENTRAL_CLIENT_SECRET || '10hW9ccNfhyc1y69bQzdgnVUnFyf76B6qcmwOtypEGo7',
-    jwtToken: process.env.RINGCENTRAL_JWT_TOKEN || 'eyJraWQiOiI4NzYyZjU5OGQwNTk0NGRiODZiZjVjYTk3ODA0NzYwOCIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJhdWQiOiJodHRwczovL3BsYXRmb3JtLnJpbmdjZW50cmFsLmNvbS9yZXN0YXBpL29hdXRoL3Rva2VuIiwic3ViIjoiMjA2OTkwOTAxOSIsImlzcyI6Imh0dHBzOi8vcGxhdGZvcm0ucmluZ2NlbnRyYWwuY29tIiwiZXhwIjozOTAzNjUxMzQyLCJpYXQiOjE3NTYxNjc2OTUsImp0aSI6IlpTckJuOHlFVDJLeEFjOXhmTlZ6ZncifQ.fHF6mXLa9wHygLYiFVQzIo4bKT8niwnYKD7PT7gFGoayZpDOkHwamesmXunn_IIY3rRT9Z2hXHgaJpdpW5ZRimaYOydcjGpj1HgdOxmTRBcYj6B4HWXb9YXO95Q2sfFLPS-3DwvcxeqNW8yoX3Cx31VpCfsybrvwq1NtDO73KulJYPByTSjoLQMj5to5gxRtKlqbhabj1o4YaeKkKb70_Sr-T0lXQS_93fOaPi0xP_AYNhDmDEQBZc1tvwUF7-ETj2Bv-EnfH5OxWfbRS3bSnZdRs1P-0TJg6SfNgwlAGNnMqEdpVyBMXt-02aQA8xgo1O9RDI-nSUXd2iKaA5CTAg',
+    jwtToken: process.env.RINGCENTRAL_JWT_TOKEN || 'eyJraWQiOiI4NzYyZjU5OGQwNTk0NGRiODZiZjVjYTk3ODA0NzYwOCIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJhdWQiOiJodHRwczovL3BsYXRmb3JtLnJpbmdjZW50cmFsLmNvbSIsInN1YiI6IjE4NjE3NjYwMTkiLCJhdXRoX3RpbWUiOjE3MjQ2Nzk3MjMsImlzcyI6Imh0dHBzOi8vcGxhdGZvcm0ucmluZ2NlbnRyYWwuY29tIiwiZXhwIjoxNzI3Mjc3NDI5LCJpYXQiOjE3MjQ2ODUyMjl9.NjuNyKI49c9AO_KAKZLyqQZg8COpHX7s_UwOF5KOQ5QzYV1y6GW2M2IiMFCaYS2zq-F-OX4d0vBJLO-VyIfgNYz_GEhPFHBr_KeBadZKj5sE7ySdJI5_bSF8vBdQ0jHx0vGgpyT3bHFe7rKQv8wKbJU4XyHJ-OMCkCsKzBu6_VN2HNVgZxNGqOQvN8_vLAj_0vI3vJh8KYgGkPzI5Tn2_8XPLdJ4KfYuG2f8qLh-0-O7DaGTXQrpJH8pO4Rz6U-2AQRzJ9Uw1xHxQVL8XNl2-IYRU0OQXWv1gSZL-vUe3GK5YYqOBzA',
     server: process.env.RINGCENTRAL_SERVER || 'https://platform.ringcentral.com',
     pythonServer: process.env.PYTHON_AI_SERVER || 'http://localhost:5000',
     pythonEndpoint: process.env.PYTHON_AI_ENDPOINT || '/api/handle-webphone-call',
-    wsPort: parseInt(process.env.WEBSOCKET_PORT || '8080'),
+    wsPort: parseInt(process.env.WEBSOCKET_PORT || '8081'),
     audioSampleRate: parseInt(process.env.AUDIO_SAMPLE_RATE || '16000'),
     audioChannels: parseInt(process.env.AUDIO_CHANNELS || '1'),
     
@@ -104,12 +107,11 @@ async function initializeWebPhone() {
     logger.info('📞 Инициализация WebPhone...');
     
     try {
-        // Получаем SIP данные
-        const sipInfo = await getSipProvisionData();
+        // Получаем полные SIP данные
+        const sipProvisionData = await getSipProvisionData();
         
         // Создаем WebPhone инстанс с правильной структурой данных
         const webPhoneConfig = {
-            platform: platform,
             logLevel: 1, // 0 = Trace, 1 = Debug, 2 = Info, 3 = Warn, 4 = Error
             audioHelper: {
                 enabled: true
@@ -130,32 +132,48 @@ async function initializeWebPhone() {
         };
         
         logger.info('🔧 Конфигурация WebPhone:', JSON.stringify(webPhoneConfig, null, 2));
-        logger.info('🔧 SIP данные для WebPhone:', JSON.stringify(sipInfo, null, 2));
         
-        // Проверяем, что sipInfo содержит нужные поля
-        if (!sipInfo.username) {
-            logger.error('❌ sipInfo не содержит username:', sipInfo);
-            throw new Error('SIP данные не содержат username');
-        }
-        
-        logger.info('✅ SIP данные корректны, создаем WebPhone...');
+        // ИСПРАВЛЕНИЕ: Передаем полные SIP данные вместо только sipInfo[0]
+        logger.info('✅ Создаем WebPhone с полными SIP данными...');
         
         // Создаем WebPhone с правильными параметрами согласно документации
-        webPhone = new WebPhone(sipInfo, webPhoneConfig);
+        webPhone = new WebPhone(sipProvisionData, webPhoneConfig);
         
         // Регистрация обработчиков событий
         setupWebPhoneEventHandlers();
+        
+        // ДОБАВЬТЕ ЭТО: Принудительная регистрация
+        logger.info('🔄 Запуск регистрации WebPhone...');
+        try {
+            // Попробуем разные способы запуска WebPhone
+            if (webPhone.userAgent && webPhone.userAgent.start) {
+                await webPhone.userAgent.start();
+                logger.info('✅ UserAgent запущен через userAgent.start()');
+            } else if (webPhone.start) {
+                await webPhone.start();
+                logger.info('✅ WebPhone запущен через webPhone.start()');
+            } else if (webPhone.register) {
+                await webPhone.register();
+                logger.info('✅ WebPhone зарегистрирован через webPhone.register()');
+            } else {
+                logger.warn('⚠️ Не найден метод запуска WebPhone, ожидаем автоматической регистрации');
+            }
+        } catch (error) {
+            logger.error(`❌ Ошибка запуска WebPhone: ${error.message}`);
+            logger.error(`❌ Stack trace: ${error.stack}`);
+        }
         
         logger.info('✅ WebPhone успешно инициализирован');
         return true;
     } catch (error) {
         logger.error(`❌ Ошибка инициализации WebPhone: ${error.message}`);
+        logger.error(`❌ Stack trace: ${error.stack}`);
         return false;
     }
 }
 
 /**
- * Получение SIP данных для WebPhone
+ * Получение ПОЛНЫХ SIP данных для WebPhone (ИСПРАВЛЕНО)
  */
 async function getSipProvisionData() {
     try {
@@ -168,17 +186,9 @@ async function getSipProvisionData() {
         });
         
         const data = await response.json();
-        console.log('🔍 СЫРЫЕ SIP ДАННЫЕ:', JSON.stringify(data, null, 2));
-        logger.info('📋 Полученные SIP данные:', JSON.stringify(data, null, 2));
-        logger.info('🔍 Структура данных:', Object.keys(data));
-        if (data.sipInfo && data.sipInfo[0]) {
-            logger.info('🔍 Поля sipInfo[0]:', Object.keys(data.sipInfo[0]));
-            logger.info('🔍 Значения sipInfo[0]:', data.sipInfo[0]);
-        } else {
-            logger.error('❌ sipInfo отсутствует или пустой');
-            logger.error('❌ Полный ответ:', data);
-        }
+        console.log('🔍 ПОЛНЫЕ SIP ДАННЫЕ:', JSON.stringify(data, null, 2));
         
+        // ИСПРАВЛЕНИЕ: Возвращаем ВСЮ структуру данных, а не только sipInfo[0]
         if (!data.sipInfo || !data.sipInfo[0]) {
             throw new Error('SIP данные не содержат необходимую информацию');
         }
@@ -192,7 +202,12 @@ async function getSipProvisionData() {
         }
         
         logger.info('✅ SIP данные получены успешно');
-        return sipInfo;
+        logger.info(`🔧 SIP Username: ${sipInfo.username}`);
+        logger.info(`🔧 SIP Domain: ${sipInfo.domain}`);
+        logger.info(`🔧 SIP Proxy: ${sipInfo.outboundProxy}`);
+        
+        // Возвращаем ПОЛНУЮ структуру данных для WebPhone
+        return data;
         
     } catch (error) {
         logger.error(`❌ Ошибка получения SIP данных: ${error.message}`);
@@ -204,6 +219,11 @@ async function getSipProvisionData() {
  * Настройка обработчиков событий WebPhone
  */
 function setupWebPhoneEventHandlers() {
+    // Событие попытки регистрации
+    webPhone.on('registering', () => {
+        logger.info('🔄 WebPhone пытается зарегистрироваться...');
+    });
+    
     // Событие регистрации
     webPhone.on('registered', () => {
         logger.info('✅ WebPhone зарегистрирован и готов принимать звонки');
@@ -211,7 +231,27 @@ function setupWebPhoneEventHandlers() {
     
     // Событие ошибки регистрации
     webPhone.on('registrationFailed', (error) => {
-        logger.error(`❌ Ошибка регистрации WebPhone: ${error.message}`);
+        logger.error(`❌ Ошибка регистрации WebPhone: ${JSON.stringify(error, null, 2)}`);
+    });
+    
+    // Событие отключения
+    webPhone.on('unregistered', () => {
+        logger.warn('⚠️ WebPhone отключен от SIP сервера');
+    });
+    
+    // Общие ошибки
+    webPhone.on('error', (error) => {
+        logger.error(`❌ WebPhone ошибка: ${JSON.stringify(error, null, 2)}`);
+    });
+    
+    // Событие подключения
+    webPhone.on('connected', () => {
+        logger.info('🔌 WebPhone подключен к SIP серверу');
+    });
+    
+    // Событие отключения
+    webPhone.on('disconnected', () => {
+        logger.warn('🔌 WebPhone отключен от SIP сервера');
     });
     
     // КРИТИЧНО: Обработчик входящих звонков
@@ -491,9 +531,30 @@ function initializeWebSocketServer() {
         });
     });
     
-    server.listen(config.wsPort, () => {
-        logger.info(`🌐 WebSocket сервер запущен на порту ${config.wsPort}`);
-    });
+    // Автоматический поиск свободного порта
+    function tryListen(port, maxAttempts = 10) {
+        if (maxAttempts <= 0) {
+            logger.error('❌ Не удалось найти свободный порт после 10 попыток');
+            throw new Error('No available ports');
+        }
+        
+        server.listen(port, (err) => {
+            if (err) {
+                if (err.code === 'EADDRINUSE') {
+                    logger.warn(`⚠️ Порт ${port} занят, пробуем ${port + 1}...`);
+                    tryListen(port + 1, maxAttempts - 1);
+                } else {
+                    logger.error(`❌ Ошибка запуска сервера: ${err.message}`);
+                    throw err;
+                }
+            } else {
+                config.wsPort = port; // Обновляем конфигурацию
+                logger.info(`🌐 WebSocket сервер запущен на порту ${port}`);
+            }
+        });
+    }
+    
+    tryListen(config.wsPort);
 }
 
 /**
