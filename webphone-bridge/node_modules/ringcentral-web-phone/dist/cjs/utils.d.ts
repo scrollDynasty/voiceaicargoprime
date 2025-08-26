@@ -1,0 +1,10 @@
+import type { SipInfo } from "./types.js";
+export declare const uuid: () => string;
+export declare const branch: () => string;
+export declare const generateAuthorization: (sipInfo: SipInfo, nonce: string, method: "REGISTER" | "INVITE") => string;
+export declare const withoutTag: (s: string) => string;
+export declare const extractAddress: (s: string) => string;
+export declare const extractNumber: (s: string) => string;
+export declare const extractTag: (peer: string) => string;
+export declare const fakeDomain: string;
+export declare const fakeEmail: string;

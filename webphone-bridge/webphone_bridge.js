@@ -5,7 +5,7 @@
 
 require('dotenv').config();
 const SDK = require('@ringcentral/sdk').SDK;
-const WebPhone = require('ringcentral-web-phone').default;
+const WebPhone = require('ringcentral-web-phone');
 const axios = require('axios');
 const WebSocket = require('ws');
 const winston = require('winston');
@@ -29,15 +29,22 @@ const logger = winston.createLogger({
 
 // Конфигурация
 const config = {
-    clientId: process.env.RINGCENTRAL_CLIENT_ID,
-    clientSecret: process.env.RINGCENTRAL_CLIENT_SECRET,
-    jwtToken: process.env.RINGCENTRAL_JWT_TOKEN,
+    clientId: process.env.RINGCENTRAL_CLIENT_ID || 'bXCZ510zNmybxAUXGIZruT',
+    clientSecret: process.env.RINGCENTRAL_CLIENT_SECRET || '10hW9ccNfhyc1y69bQzdgnVUnFyf76B6qcmwOtypEGo7',
+    jwtToken: process.env.RINGCENTRAL_JWT_TOKEN || 'eyJraWQiOiI4NzYyZjU5OGQwNTk0NGRiODZiZjVjYTk3ODA0NzYwOCIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJhdWQiOiJodHRwczovL3BsYXRmb3JtLnJpbmdjZW50cmFsLmNvbS9yZXN0YXBpL29hdXRoL3Rva2VuIiwic3ViIjoiMjA2OTkwOTAxOSIsImlzcyI6Imh0dHBzOi8vcGxhdGZvcm0ucmluZ2NlbnRyYWwuY29tIiwiZXhwIjozOTAzNjUxMzQyLCJpYXQiOjE3NTYxNjc2OTUsImp0aSI6IlpTckJuOHlFVDJLeEFjOXhmTlZ6ZncifQ.fHF6mXLa9wHygLYiFVQzIo4bKT8niwnYKD7PT7gFGoayZpDOkHwamesmXunn_IIY3rRT9Z2hXHgaJpdpW5ZRimaYOydcjGpj1HgdOxmTRBcYj6B4HWXb9YXO95Q2sfFLPS-3DwvcxeqNW8yoX3Cx31VpCfsybrvwq1NtDO73KulJYPByTSjoLQMj5to5gxRtKlqbhabj1o4YaeKkKb70_Sr-T0lXQS_93fOaPi0xP_AYNhDmDEQBZc1tvwUF7-ETj2Bv-EnfH5OxWfbRS3bSnZdRs1P-0TJg6SfNgwlAGNnMqEdpVyBMXt-02aQA8xgo1O9RDI-nSUXd2iKaA5CTAg',
     server: process.env.RINGCENTRAL_SERVER || 'https://platform.ringcentral.com',
     pythonServer: process.env.PYTHON_AI_SERVER || 'http://localhost:5000',
     pythonEndpoint: process.env.PYTHON_AI_ENDPOINT || '/api/handle-webphone-call',
     wsPort: parseInt(process.env.WEBSOCKET_PORT || '8080'),
     audioSampleRate: parseInt(process.env.AUDIO_SAMPLE_RATE || '16000'),
-    audioChannels: parseInt(process.env.AUDIO_CHANNELS || '1')
+    audioChannels: parseInt(process.env.AUDIO_CHANNELS || '1'),
+    
+    // Настройки для стабильности
+    reconnectAttempts: 5,
+    reconnectDelay: 5000,
+    healthCheckInterval: 30000,
+    callTimeout: 300000, // 5 минут максимум на звонок
+    maxConcurrentCalls: 5
 };
 
 // Глобальные переменные
@@ -46,6 +53,12 @@ let webPhone = null;
 let platform = null;
 let activeCalls = new Map();
 let wsServer = null;
+
+// Переменные для стабильности
+let isRunning = false;
+let reconnectAttempts = 0;
+let healthCheckTimer = null;
+let lastHealthCheck = null;
 
 /**
  * Инициализация RingCentral SDK
@@ -91,13 +104,15 @@ async function initializeWebPhone() {
     logger.info('📞 Инициализация WebPhone...');
     
     try {
-        // Создаем WebPhone инстанс
+        // Получаем SIP данные
+        const sipInfo = await getSipProvisionData();
+        
+        // Создаем WebPhone инстанс с новой версией API
         webPhone = new WebPhone({
+            platform: platform,
             logLevel: 1, // 0 = Trace, 1 = Debug, 2 = Info, 3 = Warn, 4 = Error
             audioHelper: {
-                enabled: true,
-                incoming: 'audio/incoming.ogg', // Звук входящего звонка
-                outgoing: 'audio/outgoing.ogg'  // Звук исходящего звонка
+                enabled: true
             },
             media: {
                 remote: {
@@ -108,11 +123,8 @@ async function initializeWebPhone() {
                     audio: true,
                     video: false
                 }
-            },
-            enableDscp: true,
-            enableQos: true,
-            sipInfo: await getSipProvisionData()
-        });
+            }
+        }, sipInfo);
         
         // Регистрация обработчиков событий
         setupWebPhoneEventHandlers();
@@ -162,6 +174,17 @@ function setupWebPhoneEventHandlers() {
     webPhone.on('invite', async (session) => {
         logger.info('🔔 ВХОДЯЩИЙ ЗВОНОК ОБНАРУЖЕН!');
         
+        // Проверяем лимит одновременных звонков
+        if (activeCalls.size >= config.maxConcurrentCalls) {
+            logger.warn(`⚠️ Превышен лимит одновременных звонков (${config.maxConcurrentCalls}). Отклоняем звонок.`);
+            try {
+                await session.reject();
+            } catch (err) {
+                logger.error(`❌ Ошибка отклонения звонка: ${err.message}`);
+            }
+            return;
+        }
+        
         const callId = uuidv4();
         const fromNumber = session.request.from.displayName || session.request.from.uri.user || 'Unknown';
         const toNumber = session.request.to.displayName || session.request.to.uri.user || 'Unknown';
@@ -169,6 +192,7 @@ function setupWebPhoneEventHandlers() {
         logger.info(`📞 Звонок от: ${fromNumber}`);
         logger.info(`📞 Звонок на: ${toNumber}`);
         logger.info(`🆔 ID звонка: ${callId}`);
+        logger.info(`📊 Активных звонков: ${activeCalls.size}/${config.maxConcurrentCalls}`);
         
         // Сохраняем информацию о звонке
         const callData = {
@@ -179,10 +203,17 @@ function setupWebPhoneEventHandlers() {
             startTime: new Date(),
             session: session,
             audioStream: null,
-            wsConnection: null
+            wsConnection: null,
+            timeout: null // Для отслеживания таймаута
         };
         
         activeCalls.set(callId, callData);
+        
+        // Устанавливаем таймаут на звонок
+        callData.timeout = setTimeout(() => {
+            logger.warn(`⏰ Таймаут звонка ${callId} (${config.callTimeout}ms)`);
+            cleanupCall(callId);
+        }, config.callTimeout);
         
         try {
             // АВТОМАТИЧЕСКИ ПРИНИМАЕМ ЗВОНОК
@@ -201,7 +232,7 @@ function setupWebPhoneEventHandlers() {
             
         } catch (error) {
             logger.error(`❌ Ошибка при приеме звонка: ${error.message}`);
-            activeCalls.delete(callId);
+            cleanupCall(callId);
         }
     });
 }
@@ -361,20 +392,41 @@ function cleanupCall(callId) {
     
     logger.info(`🧹 Очистка ресурсов для звонка ${callId}`);
     
+    // Очищаем таймаут
+    if (callData.timeout) {
+        clearTimeout(callData.timeout);
+        callData.timeout = null;
+    }
+    
     // Закрываем WebSocket
     if (callData.wsConnection) {
-        callData.wsConnection.close();
+        try {
+            callData.wsConnection.close();
+        } catch (error) {
+            logger.error(`❌ Ошибка закрытия WebSocket: ${error.message}`);
+        }
+        callData.wsConnection = null;
+    }
+    
+    // Завершаем сессию если еще активна
+    if (callData.session && !callData.session.isEnded()) {
+        try {
+            callData.session.terminate();
+        } catch (error) {
+            logger.error(`❌ Ошибка завершения сессии: ${error.message}`);
+        }
     }
     
     // Останавливаем аудио стриминг
     if (callData.audioStreamInterval) {
         clearInterval(callData.audioStreamInterval);
+        callData.audioStreamInterval = null;
     }
     
     // Удаляем из активных звонков
     activeCalls.delete(callId);
     
-    logger.info(`✅ Ресурсы очищены для звонка ${callId}`);
+    logger.info(`✅ Ресурсы очищены для звонка ${callId} (активных звонков: ${activeCalls.size})`);
 }
 
 /**
@@ -398,6 +450,99 @@ function initializeWebSocketServer() {
     server.listen(config.wsPort, () => {
         logger.info(`🌐 WebSocket сервер запущен на порту ${config.wsPort}`);
     });
+}
+
+/**
+ * Мониторинг здоровья системы
+ */
+function startHealthCheck() {
+    if (healthCheckTimer) {
+        clearInterval(healthCheckTimer);
+    }
+    
+    healthCheckTimer = setInterval(async () => {
+        try {
+            logger.debug('🩺 Проверка здоровья системы...');
+            
+            // Проверяем соединение с RingCentral
+            if (platform && platform.loggedIn()) {
+                lastHealthCheck = new Date();
+                
+                // Проверяем регистрацию WebPhone
+                if (webPhone && webPhone.isConnected()) {
+                    logger.debug('✅ WebPhone подключен и зарегистрирован');
+                } else {
+                    logger.warn('⚠️ WebPhone не зарегистрирован, попытка переподключения...');
+                    await attemptReconnect();
+                }
+                
+                // Проверяем Python сервер
+                try {
+                    const response = await axios.get(`${config.pythonServer}/health`, { timeout: 5000 });
+                    if (response.status === 200) {
+                        logger.debug('✅ Python AI сервер доступен');
+                    }
+                } catch (error) {
+                    logger.warn(`⚠️ Python AI сервер недоступен: ${error.message}`);
+                }
+                
+            } else {
+                logger.warn('⚠️ RingCentral соединение потеряно, попытка переподключения...');
+                await attemptReconnect();
+            }
+            
+            // Логируем статистику
+            logger.debug(`📊 Активных звонков: ${activeCalls.size}/${config.maxConcurrentCalls}`);
+            
+        } catch (error) {
+            logger.error(`❌ Ошибка проверки здоровья: ${error.message}`);
+        }
+    }, config.healthCheckInterval);
+    
+    logger.info(`🩺 Мониторинг здоровья запущен (интервал: ${config.healthCheckInterval}ms)`);
+}
+
+/**
+ * Попытка переподключения
+ */
+async function attemptReconnect() {
+    if (reconnectAttempts >= config.reconnectAttempts) {
+        logger.error(`❌ Превышено максимальное количество попыток переподключения (${config.reconnectAttempts})`);
+        return false;
+    }
+    
+    reconnectAttempts++;
+    logger.info(`🔄 Попытка переподключения ${reconnectAttempts}/${config.reconnectAttempts}...`);
+    
+    try {
+        // Останавливаем текущие соединения
+        if (webPhone) {
+            webPhone.disconnect();
+        }
+        
+        // Ждем перед переподключением
+        await new Promise(resolve => setTimeout(resolve, config.reconnectDelay));
+        
+        // Переподключение к RingCentral
+        const rcInitialized = await initializeRingCentral();
+        if (!rcInitialized) {
+            throw new Error('Не удалось переподключиться к RingCentral');
+        }
+        
+        // Переподключение WebPhone
+        const wpInitialized = await initializeWebPhone();
+        if (!wpInitialized) {
+            throw new Error('Не удалось переподключить WebPhone');
+        }
+        
+        reconnectAttempts = 0;
+        logger.info('✅ Переподключение успешно');
+        return true;
+        
+    } catch (error) {
+        logger.error(`❌ Ошибка переподключения: ${error.message}`);
+        return false;
+    }
 }
 
 /**
@@ -426,6 +571,12 @@ async function main() {
     // Запуск WebSocket сервера
     initializeWebSocketServer();
     
+    // Запуск мониторинга здоровья
+    startHealthCheck();
+    
+    // Устанавливаем флаг готовности
+    isRunning = true;
+    
     logger.info('✅ WebPhone Bridge успешно запущен и готов принимать звонки!');
     logger.info('🎯 Ожидание входящих звонков...');
     
@@ -447,19 +598,42 @@ async function main() {
 function shutdown() {
     logger.info('🛑 Завершение работы WebPhone Bridge...');
     
+    isRunning = false;
+    
+    // Останавливаем мониторинг здоровья
+    if (healthCheckTimer) {
+        clearInterval(healthCheckTimer);
+        healthCheckTimer = null;
+    }
+    
     // Завершаем все активные звонки
     activeCalls.forEach((callData, callId) => {
         logger.info(`📞 Завершение звонка ${callId}`);
         if (callData.session) {
-            callData.session.terminate();
+            try {
+                callData.session.terminate();
+            } catch (error) {
+                logger.error(`❌ Ошибка завершения звонка ${callId}: ${error.message}`);
+            }
         }
         cleanupCall(callId);
     });
+    
+    // Отключаем WebPhone
+    if (webPhone) {
+        try {
+            webPhone.disconnect();
+        } catch (error) {
+            logger.error(`❌ Ошибка отключения WebPhone: ${error.message}`);
+        }
+    }
     
     // Закрываем WebSocket сервер
     if (wsServer) {
         wsServer.close();
     }
+    
+    logger.info('✅ WebPhone Bridge корректно завершен');
     
     // Выход из программы
     process.exit(0);

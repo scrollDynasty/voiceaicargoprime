@@ -35,7 +35,7 @@ class Config:
     # Speech Processing Configuration
     SPEECH = {
         "whisper_model": os.getenv("WHISPER_MODEL", "base"),  # tiny, base, small, medium, large
-        "whisper_device": os.getenv("WHISPER_DEVICE", "cuda" if os.getenv("USE_GPU", "True").lower() == "true" else "cpu"),
+        "whisper_device": os.getenv("WHISPER_DEVICE", "cpu"),  # Force CPU for testing
         "sample_rate": 16000,
         "chunk_duration": 30,  # seconds
         "vad_threshold": 0.5,
@@ -45,7 +45,7 @@ class Config:
     # TTS Configuration
     TTS = {
         "model_name": os.getenv("TTS_MODEL", "tts_models/en/vctk/vits"),  # Более качественная модель
-        "device": os.getenv("TTS_DEVICE", "cuda" if os.getenv("USE_GPU", "True").lower() == "true" else "cpu"),
+        "device": os.getenv("TTS_DEVICE", "cpu"),  # Force CPU for testing
         "speaker": "p227",  # Дружелюбная и теплая женская диспетчер
         "speed": 1.15,  # Быстро и энергично как в тесте
         "volume": 1.2,  # Громко и позитивно
@@ -120,7 +120,7 @@ class Config:
         "max_concurrent_calls": int(os.getenv("MAX_CONCURRENT_CALLS", "5")),  # Reduced for RTX 4060
         "response_timeout": 30,  # seconds
         "call_timeout": 300,  # seconds
-        "use_gpu": os.getenv("USE_GPU", "True").lower() == "true",
+        "use_gpu": False,  # Force CPU for testing
         "gpu_memory_fraction": 0.7  # Reduced for RTX 4060 8GB to prevent OOM
     }
     

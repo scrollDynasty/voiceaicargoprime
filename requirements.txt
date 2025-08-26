@@ -22,6 +22,7 @@ pyaudio
 
 # WebSocket для аудио стриминга
 websockets==12.0
+aiohttp==3.9.1
 
 # RingCentral API
 ringcentral

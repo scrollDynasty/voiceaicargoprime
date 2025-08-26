@@ -756,7 +756,7 @@ async def initialize_ringcentral():
         raise
 
 @app.route('/api/handle-webphone-call', methods=['POST'])
-async def handle_webphone_call():
+def handle_webphone_call():
     """
     Обработка звонков от WebPhone Bridge
     
@@ -779,7 +779,13 @@ async def handle_webphone_call():
         logger.info(f"   Session ID: {call_data.get('sessionId')}")
         
         # Обрабатываем звонок через audio stream handler
-        response = await audio_stream_handler.handle_webphone_call(call_data)
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        response = loop.run_until_complete(audio_stream_handler.handle_webphone_call(call_data))
         
         logger.info(f"✅ Звонок обработан: {response.get('status')}")
         

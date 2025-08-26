@@ -1,0 +1,20 @@
+declare const callControlCommands: {
+    ChangeMessage: number;
+    ServerFreeResources: number;
+    NewMsg: number;
+    ReLogin: number;
+    ChangePhones: number;
+    IncomingCall: number;
+    AlreadyProcessed: number;
+    ClientMinimize: number;
+    SessionClose: number;
+    ClientForward: number;
+    ClientVoicemail: number;
+    ClientReject: number;
+    ClientStartReply: number;
+    ClientReply: number;
+    ClientNotProcessed: number;
+    ClientClosed: number;
+    ClientReceiveConfirm: number;
+};
+export default callControlCommands;

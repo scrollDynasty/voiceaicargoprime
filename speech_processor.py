@@ -10,7 +10,9 @@ import logging
 import numpy as np
 import torch
 import whisper
-from TTS.api import TTS
+# TTS временно отключен для тестирования
+# from TTS.api import TTS
+TTS = None
 from pydub import AudioSegment
 import soundfile as sf
 import librosa
@@ -49,11 +51,8 @@ class SpeechProcessor:
                     device=Config.SPEECH["whisper_device"]
                 )
                 
-                logger.info("Initializing TTS model...")
-                self.tts_model = TTS(
-                    model_name=Config.TTS["model_name"],
-                    progress_bar=False
-                )
+                logger.info("TTS temporarily disabled for testing...")
+                self.tts_model = None  # TTS(model_name=Config.TTS["model_name"])
                 
                 self.initialized = True
                 logger.info("Speech processor initialized successfully")
@@ -121,14 +120,26 @@ class SpeechProcessor:
                 with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
                     output_path = temp_file.name
             
-            # Synthesize speech with improved settings
-            self.tts_model.tts_to_file(
-                text=text,
-                file_path=output_path,
-                speaker=Config.TTS["speaker"],
-                speed=Config.TTS["speed"],
-                sample_rate=Config.TTS["sample_rate"]
-            )
+            # TTS temporary stub - generate silence
+            if self.tts_model is None:
+                logger.info("TTS disabled - generating silence audio for testing")
+                # Generate 1 second of silence as placeholder
+                import wave
+                with wave.open(output_path, 'w') as wav_file:
+                    wav_file.setnchannels(1)  # mono
+                    wav_file.setsampwidth(2)  # 16 bit
+                    wav_file.setframerate(16000)  # 16 kHz
+                    # 1 second of silence
+                    wav_file.writeframes(b'\x00\x00' * 16000)
+            else:
+                # Real TTS synthesis
+                self.tts_model.tts_to_file(
+                    text=text,
+                    file_path=output_path,
+                    speaker=Config.TTS["speaker"],
+                    speed=Config.TTS["speed"],
+                    sample_rate=Config.TTS["sample_rate"]
+                )
             
             # Read audio data
             with open(output_path, "rb") as f:
@@ -138,7 +149,7 @@ class SpeechProcessor:
             if not output_path or "tmp" in output_path:
                 os.unlink(output_path)
             
-            logger.info(f"Synthesized speech for: {text[:50]}...")
+            logger.info(f"Generated audio for: {text[:50]}...")
             return audio_data
             
         except Exception as e:
