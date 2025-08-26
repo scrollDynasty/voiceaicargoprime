@@ -346,29 +346,53 @@ class MockRTCPeerConnection {
         if (stream && !this._localStreams.includes(stream)) {
             this._localStreams.push(stream);
         }
-        return {
+        
+        // ⚠️ КРИТИЧНО: addTrack должен возвращать RTCRtpSender напрямую, а не обертку!
+        // RingCentral WebPhone ожидает sender.getParameters(), а не result.sender.getParameters()
+        const rtcRtpSender = {
             track: track,
-            sender: {
-                track: track,
-                replaceTrack: (newTrack) => {
-                    console.log('🔧 MockRTCPeerConnection: replaceTrack вызван');
-                    return Promise.resolve();
-                },
-                getParameters: () => {
-                    console.log('🔧 MockRTCPeerConnection: getParameters вызван');
-                    return {
-                        encodings: [],
-                        headerExtensions: [],
-                        rtcp: {},
-                        codecs: []
-                    };
-                },
-                setParameters: (parameters) => {
-                    console.log('🔧 MockRTCPeerConnection: setParameters вызван');
-                    return Promise.resolve();
-                }
+            
+            // Основные методы RTCRtpSender
+            replaceTrack: (newTrack) => {
+                console.log('🔧 MockRTCPeerConnection: replaceTrack вызван');
+                return Promise.resolve();
+            },
+            
+            getParameters: () => {
+                console.log('🔧 MockRTCPeerConnection: getParameters вызван');
+                return {
+                    encodings: [{
+                        active: true,
+                        codecPayloadType: 111,
+                        maxBitrate: 128000,
+                        priority: 'high'
+                    }],
+                    headerExtensions: [],
+                    rtcp: {
+                        cname: 'mock-cname',
+                        reducedSize: false
+                    },
+                    codecs: [{
+                        payloadType: 111,
+                        mimeType: 'audio/opus',
+                        clockRate: 48000,
+                        channels: 2
+                    }]
+                };
+            },
+            
+            setParameters: (parameters) => {
+                console.log('🔧 MockRTCPeerConnection: setParameters вызван', parameters);
+                return Promise.resolve();
+            },
+            
+            getStats: () => {
+                console.log('🔧 MockRTCPeerConnection: getStats вызван');
+                return Promise.resolve(new Map());
             }
         };
+        
+        return rtcRtpSender;
     }
 
     removeTrack(sender) {

@@ -4563,3 +4563,191 @@
 2025-08-26T22:34:00.918Z [INFO] 🔍 SipClient Event: outboundMessage
 2025-08-26T22:34:00.947Z [INFO] 🔍 SipClient Event: inboundMessage
 2025-08-26T22:34:00.979Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T22:58:13.667Z [INFO] 🎯 Запуск RingCentral WebPhone Bridge...
+2025-08-26T22:58:13.668Z [INFO] 📋 Конфигурация:
+2025-08-26T22:58:13.668Z [INFO]    Client ID: bXCZ510zNm...
+2025-08-26T22:58:13.668Z [INFO]    Server: https://platform.ringcentral.com
+2025-08-26T22:58:13.668Z [INFO]    Python Server: http://localhost:5000
+2025-08-26T22:58:13.669Z [INFO] 🚀 Инициализация RingCentral SDK...
+2025-08-26T22:58:13.669Z [INFO] 🔐 Авторизация через JWT токен...
+2025-08-26T22:58:13.775Z [INFO] ✅ RingCentral SDK успешно инициализирован
+2025-08-26T22:58:13.821Z [INFO] 📞 Расширение: 102
+2025-08-26T22:58:13.821Z [INFO] 👤 Пользователь: Alex Bakhronov
+2025-08-26T22:58:13.822Z [INFO] 📱 Device ID будет получен при регистрации через SIP Provision API
+2025-08-26T22:58:13.822Z [INFO] 📞 Инициализация WebPhone...
+2025-08-26T22:58:13.822Z [WARN] ⚠️ Не удалось определить версию WebPhone SDK
+2025-08-26T22:58:13.822Z [INFO] 🔧 WebPhone конструктор: function
+2025-08-26T22:58:13.822Z [INFO] 🔧 WebPhone прототип: 
+2025-08-26T22:58:13.822Z [INFO] 🔍 Начинаем процесс регистрации SIP устройства...
+2025-08-26T22:58:13.822Z [INFO] 📱 Регистрация устройства в RingCentral...
+2025-08-26T22:58:13.909Z [INFO] 🔍 Проверка статуса зарегистрированного устройства...
+2025-08-26T22:58:13.909Z [INFO] 📱 Device ID: 805326174019
+2025-08-26T22:58:13.909Z [INFO] 📱 Device Type: WebPhone
+2025-08-26T22:58:13.909Z [INFO] 📱 Device Status: Online
+2025-08-26T22:58:13.909Z [INFO] 📱 Extension: 102
+2025-08-26T22:58:13.909Z [INFO] ✅ Устройство успешно зарегистрировано в RingCentral
+2025-08-26T22:58:13.909Z [INFO] 🔧 SIP Username: 15135725833*102
+2025-08-26T22:58:13.909Z [INFO] 🔧 SIP Domain: sip.ringcentral.com
+2025-08-26T22:58:13.909Z [INFO] 🔧 SIP Proxy: sip131-1231.ringcentral.com:8083
+2025-08-26T22:58:13.909Z [INFO] 🔧 Authorization ID: 805326174019
+2025-08-26T22:58:13.910Z [INFO] 🚩 SIP Flags:
+2025-08-26T22:58:13.910Z [INFO] ✅ SIP устройство полностью зарегистрировано и готово к работе
+2025-08-26T22:58:13.910Z [INFO] 🔍 Структура sipInfo:
+2025-08-26T22:58:13.910Z [INFO] 🔧 Конфигурация WebPhone:
+2025-08-26T22:58:13.910Z [INFO] ✅ Создаем WebPhone с полными SIP данными...
+2025-08-26T22:58:13.910Z [INFO] 🔧 WebPhone опции:
+2025-08-26T22:58:13.910Z [INFO] ✅ WebPhone создается с autoAnswer: true для автоматического приема звонков
+2025-08-26T22:58:13.910Z [INFO] 🔧 Создаем WebPhone с расширенными опциями...
+2025-08-26T22:58:13.912Z [INFO] 🔍 Диагностика WebPhone объекта:
+2025-08-26T22:58:13.912Z [INFO]    - webPhone: object
+2025-08-26T22:58:13.912Z [INFO]    - webPhone keys: listeners, tempListeners, sipInfo, sipClient, deviceManager, callSessions, autoAnswer, options, disposed
+2025-08-26T22:58:13.912Z [INFO] ✅ Найден sipClient в WebPhone
+2025-08-26T22:58:13.913Z [INFO] 🔍 sipClient свойства: listeners, tempListeners, disposed, wsc, sipInfo, instanceId, debug, timeoutHandle, useBackupOutboundProxy
+2025-08-26T22:58:13.913Z [INFO] ✅ userAgent успешно создан
+2025-08-26T22:58:13.913Z [INFO] 🔍 Структура WebPhone объекта:
+2025-08-26T22:58:13.913Z [INFO]    - webPhone: object
+2025-08-26T22:58:13.913Z [INFO]    - userAgent: object
+2025-08-26T22:58:13.913Z [INFO]    - userAgent.state: undefined
+2025-08-26T22:58:13.913Z [INFO]    - userAgent.isRegistered: undefined
+2025-08-26T22:58:13.913Z [INFO] 🔧 Настройка обработчиков UserAgent для входящих звонков...
+2025-08-26T22:58:13.913Z [INFO] 🔄 Запуск регистрации WebPhone...
+2025-08-26T22:58:13.913Z [INFO] 🔍 Доступные методы WebPhone:
+2025-08-26T22:58:13.913Z [INFO]    - webPhone.start: function
+2025-08-26T22:58:13.913Z [INFO]    - webPhone.register: undefined
+2025-08-26T22:58:13.913Z [INFO]    - webPhone.userAgent.start: function
+2025-08-26T22:58:13.913Z [INFO]    - webPhone.userAgent.register: function
+2025-08-26T22:58:13.913Z [INFO]    - webPhone.sipClient: object
+2025-08-26T22:58:14.018Z [INFO] 🔍 SipClient Event: outboundMessage
+2025-08-26T22:58:14.047Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T22:58:14.081Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T22:58:14.082Z [INFO] 🔍 SipClient Event: outboundMessage
+2025-08-26T22:58:14.110Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T22:58:14.149Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T22:58:14.149Z [INFO] ✅ WebPhone запущен через webPhone.start()
+2025-08-26T22:58:14.149Z [INFO] 🔄 Инициируем принудительную SIP регистрацию...
+2025-08-26T22:58:14.149Z [INFO] 🔍 SipClient Event: outboundMessage
+2025-08-26T22:58:14.173Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T22:58:14.173Z [INFO] ✅ SIP регистрация инициирована через sipClient.register()
+2025-08-26T22:58:14.173Z [INFO] ✅ WebPhone успешно инициализирован
+2025-08-26T22:58:14.176Z [INFO] 🩺 Мониторинг здоровья запущен (интервал: 30000ms)
+2025-08-26T22:58:14.176Z [INFO] ⏰ Запуск мониторинга устройства с интервалом 300 секунд
+2025-08-26T22:58:14.176Z [INFO] ✅ WebPhone Bridge успешно запущен и готов принимать звонки!
+2025-08-26T22:58:14.176Z [INFO] 🎯 Ожидание входящих звонков...
+2025-08-26T22:58:14.176Z [INFO] 🌐 WebSocket сервер запущен на порту 8081
+2025-08-26T22:58:16.175Z [INFO] 📊 Статус WebPhone после инициализации: {"webPhoneExists":true,"isRegistered":false,"userAgentExists":true,"sipClientExists":true,"activeCalls":0,"maxCalls":5,"deviceRegistered":true,"deviceId":"805326174019","deviceStatus":"Online","pollingInterval":null,"userAgentState":"unknown","userAgentRegistered":"method_not_available"}
+2025-08-26T22:58:16.176Z [INFO] 🔍 Дополнительная диагностика sipClient:
+2025-08-26T22:58:16.176Z [INFO]    - wsc: object
+2025-08-26T22:58:16.176Z [INFO]    - disposed: false
+2025-08-26T22:58:16.176Z [INFO]    - instanceId: 805326174019
+2025-08-26T22:58:16.176Z [INFO]    - timeoutHandle: 406
+2025-08-26T22:58:16.176Z [INFO]    - wsc.readyState: 1
+2025-08-26T22:58:16.176Z [INFO]    - wsc.url: wss://sip131-1231.ringcentral.com:8083/
+2025-08-26T22:58:16.176Z [INFO] ✅ WebSocket соединение активно, устанавливаем флаг регистрации
+2025-08-26T22:58:17.177Z [INFO] 🔄 Принудительная регистрация устройства через SIP Provision API...
+2025-08-26T22:58:17.177Z [INFO] 📋 Отправляем запрос на регистрацию:
+2025-08-26T22:58:17.257Z [INFO] ✅ Устройство успешно зарегистрировано через SIP Provision API
+2025-08-26T22:58:17.257Z [INFO] 📋 Результат регистрации:
+2025-08-26T22:58:17.257Z [INFO] 📱 Обновлен Device ID: 805326174019
+2025-08-26T22:58:17.257Z [INFO] 🔄 Обновляем SIP данные WebPhone...
+2025-08-26T22:58:17.257Z [INFO] 🔄 Обновление WebPhone с новыми SIP данными...
+2025-08-26T22:58:17.257Z [INFO] ✅ SIP данные обновлены в sipClient
+2025-08-26T22:58:17.257Z [INFO] 🔍 SipClient Event: outboundMessage
+2025-08-26T22:58:17.281Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T22:58:17.281Z [INFO] ✅ sipClient перерегистрирован с новыми данными
+2025-08-26T22:58:44.198Z [WARN] ⚠️ Python AI сервер недоступен: 
+2025-08-26T22:59:14.220Z [WARN] ⚠️ Python AI сервер недоступен: 
+2025-08-26T22:59:44.230Z [WARN] ⚠️ Python AI сервер недоступен: Request failed with status code 500
+2025-08-26T23:00:04.165Z [INFO] 🔍 SipClient Event: outboundMessage
+2025-08-26T23:00:04.194Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T23:00:04.226Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T23:00:29.908Z [INFO] 🎯 Запуск RingCentral WebPhone Bridge...
+2025-08-26T23:00:29.909Z [INFO] 📋 Конфигурация:
+2025-08-26T23:00:29.909Z [INFO]    Client ID: bXCZ510zNm...
+2025-08-26T23:00:29.909Z [INFO]    Server: https://platform.ringcentral.com
+2025-08-26T23:00:29.909Z [INFO]    Python Server: http://localhost:5000
+2025-08-26T23:00:29.909Z [INFO] 🚀 Инициализация RingCentral SDK...
+2025-08-26T23:00:29.910Z [INFO] 🔐 Авторизация через JWT токен...
+2025-08-26T23:00:30.005Z [INFO] ✅ RingCentral SDK успешно инициализирован
+2025-08-26T23:00:30.047Z [INFO] 📞 Расширение: 102
+2025-08-26T23:00:30.047Z [INFO] 👤 Пользователь: Alex Bakhronov
+2025-08-26T23:00:30.047Z [INFO] 📱 Device ID будет получен при регистрации через SIP Provision API
+2025-08-26T23:00:30.048Z [INFO] 📞 Инициализация WebPhone...
+2025-08-26T23:00:30.048Z [WARN] ⚠️ Не удалось определить версию WebPhone SDK
+2025-08-26T23:00:30.048Z [INFO] 🔧 WebPhone конструктор: function
+2025-08-26T23:00:30.048Z [INFO] 🔧 WebPhone прототип: 
+2025-08-26T23:00:30.048Z [INFO] 🔍 Начинаем процесс регистрации SIP устройства...
+2025-08-26T23:00:30.048Z [INFO] 📱 Регистрация устройства в RingCentral...
+2025-08-26T23:00:30.123Z [INFO] 🔍 Проверка статуса зарегистрированного устройства...
+2025-08-26T23:00:30.123Z [INFO] 📱 Device ID: 805313714019
+2025-08-26T23:00:30.123Z [INFO] 📱 Device Type: WebPhone
+2025-08-26T23:00:30.123Z [INFO] 📱 Device Status: Online
+2025-08-26T23:00:30.123Z [INFO] 📱 Extension: 102
+2025-08-26T23:00:30.123Z [INFO] ✅ Устройство успешно зарегистрировано в RingCentral
+2025-08-26T23:00:30.123Z [INFO] 🔧 SIP Username: 15135725833*102
+2025-08-26T23:00:30.123Z [INFO] 🔧 SIP Domain: sip.ringcentral.com
+2025-08-26T23:00:30.123Z [INFO] 🔧 SIP Proxy: sip132-1211.ringcentral.com:8083
+2025-08-26T23:00:30.123Z [INFO] 🔧 Authorization ID: 805313714019
+2025-08-26T23:00:30.124Z [INFO] 🚩 SIP Flags:
+2025-08-26T23:00:30.124Z [INFO] ✅ SIP устройство полностью зарегистрировано и готово к работе
+2025-08-26T23:00:30.124Z [INFO] 🔍 Структура sipInfo:
+2025-08-26T23:00:30.124Z [INFO] 🔧 Конфигурация WebPhone:
+2025-08-26T23:00:30.124Z [INFO] ✅ Создаем WebPhone с полными SIP данными...
+2025-08-26T23:00:30.124Z [INFO] 🔧 WebPhone опции:
+2025-08-26T23:00:30.124Z [INFO] ✅ WebPhone создается с autoAnswer: true для автоматического приема звонков
+2025-08-26T23:00:30.124Z [INFO] 🔧 Создаем WebPhone с расширенными опциями...
+2025-08-26T23:00:30.127Z [INFO] 🔍 Диагностика WebPhone объекта:
+2025-08-26T23:00:30.127Z [INFO]    - webPhone: object
+2025-08-26T23:00:30.127Z [INFO]    - webPhone keys: listeners, tempListeners, sipInfo, sipClient, deviceManager, callSessions, autoAnswer, options, disposed
+2025-08-26T23:00:30.127Z [INFO] ✅ Найден sipClient в WebPhone
+2025-08-26T23:00:30.127Z [INFO] 🔍 sipClient свойства: listeners, tempListeners, disposed, wsc, sipInfo, instanceId, debug, timeoutHandle, useBackupOutboundProxy
+2025-08-26T23:00:30.127Z [INFO] ✅ userAgent успешно создан
+2025-08-26T23:00:30.127Z [INFO] 🔍 Структура WebPhone объекта:
+2025-08-26T23:00:30.127Z [INFO]    - webPhone: object
+2025-08-26T23:00:30.127Z [INFO]    - userAgent: object
+2025-08-26T23:00:30.127Z [INFO]    - userAgent.state: undefined
+2025-08-26T23:00:30.127Z [INFO]    - userAgent.isRegistered: undefined
+2025-08-26T23:00:30.127Z [INFO] 🔧 Настройка обработчиков UserAgent для входящих звонков...
+2025-08-26T23:00:30.127Z [INFO] 🔄 Запуск регистрации WebPhone...
+2025-08-26T23:00:30.127Z [INFO] 🔍 Доступные методы WebPhone:
+2025-08-26T23:00:30.127Z [INFO]    - webPhone.start: function
+2025-08-26T23:00:30.127Z [INFO]    - webPhone.register: undefined
+2025-08-26T23:00:30.127Z [INFO]    - webPhone.userAgent.start: function
+2025-08-26T23:00:30.127Z [INFO]    - webPhone.userAgent.register: function
+2025-08-26T23:00:30.127Z [INFO]    - webPhone.sipClient: object
+2025-08-26T23:00:30.235Z [INFO] 🔍 SipClient Event: outboundMessage
+2025-08-26T23:00:30.265Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T23:00:30.298Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T23:00:30.299Z [INFO] 🔍 SipClient Event: outboundMessage
+2025-08-26T23:00:30.327Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T23:00:30.384Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T23:00:30.385Z [INFO] ✅ WebPhone запущен через webPhone.start()
+2025-08-26T23:00:30.385Z [INFO] 🔄 Инициируем принудительную SIP регистрацию...
+2025-08-26T23:00:30.385Z [INFO] 🔍 SipClient Event: outboundMessage
+2025-08-26T23:00:30.408Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T23:00:30.408Z [INFO] ✅ SIP регистрация инициирована через sipClient.register()
+2025-08-26T23:00:30.408Z [INFO] ✅ WebPhone успешно инициализирован
+2025-08-26T23:00:30.411Z [INFO] 🩺 Мониторинг здоровья запущен (интервал: 30000ms)
+2025-08-26T23:00:30.411Z [INFO] ⏰ Запуск мониторинга устройства с интервалом 300 секунд
+2025-08-26T23:00:30.411Z [INFO] ✅ WebPhone Bridge успешно запущен и готов принимать звонки!
+2025-08-26T23:00:30.411Z [INFO] 🎯 Ожидание входящих звонков...
+2025-08-26T23:00:30.411Z [INFO] 🌐 WebSocket сервер запущен на порту 8081
+2025-08-26T23:00:32.410Z [INFO] 📊 Статус WebPhone после инициализации: {"webPhoneExists":true,"isRegistered":false,"userAgentExists":true,"sipClientExists":true,"activeCalls":0,"maxCalls":5,"deviceRegistered":true,"deviceId":"805313714019","deviceStatus":"Online","pollingInterval":null,"userAgentState":"unknown","userAgentRegistered":"method_not_available"}
+2025-08-26T23:00:32.410Z [INFO] 🔍 Дополнительная диагностика sipClient:
+2025-08-26T23:00:32.410Z [INFO]    - wsc: object
+2025-08-26T23:00:32.410Z [INFO]    - disposed: false
+2025-08-26T23:00:32.410Z [INFO]    - instanceId: 805313714019
+2025-08-26T23:00:32.410Z [INFO]    - timeoutHandle: 406
+2025-08-26T23:00:32.411Z [INFO]    - wsc.readyState: 1
+2025-08-26T23:00:32.411Z [INFO]    - wsc.url: wss://sip132-1211.ringcentral.com:8083/
+2025-08-26T23:00:32.411Z [INFO] ✅ WebSocket соединение активно, устанавливаем флаг регистрации
+2025-08-26T23:00:33.412Z [INFO] 🔄 Принудительная регистрация устройства через SIP Provision API...
+2025-08-26T23:00:33.412Z [INFO] 📋 Отправляем запрос на регистрацию:
+2025-08-26T23:00:33.523Z [INFO] ✅ Устройство успешно зарегистрировано через SIP Provision API
+2025-08-26T23:00:33.523Z [INFO] 📋 Результат регистрации:
+2025-08-26T23:00:33.523Z [INFO] 📱 Обновлен Device ID: 805313714019
+2025-08-26T23:00:33.523Z [INFO] 🔄 Обновляем SIP данные WebPhone...
+2025-08-26T23:00:33.524Z [INFO] 🔄 Обновление WebPhone с новыми SIP данными...
+2025-08-26T23:00:33.524Z [INFO] ✅ SIP данные обновлены в sipClient
+2025-08-26T23:00:33.524Z [INFO] 🔍 SipClient Event: outboundMessage
+2025-08-26T23:00:33.547Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T23:00:33.547Z [INFO] ✅ sipClient перерегистрирован с новыми данными
