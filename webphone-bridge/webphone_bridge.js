@@ -64,6 +64,9 @@ let platform = null;
 let activeCalls = new Map();
 let wsServer = null;
 
+// ✅ Глобальная переменная для отслеживания обработанных звонков
+const processedCalls = new Set();
+
 // Переменные для стабильности
 let isRunning = false;
 let reconnectAttempts = 0;
@@ -1158,7 +1161,7 @@ async function handleWebhookEvent(eventData) {
                     const inboundCall = body.parties.find(party => 
                         party.direction === 'Inbound' && 
                         party.status && 
-                        ['Setup', 'Proceeding', 'Ringing'].includes(party.status.code) &&
+                        party.status.code === 'Ringing' &&  // ✅ Только Ringing статус
                         !party.missedCall
                     );
                     
@@ -1167,11 +1170,28 @@ async function handleWebhookEvent(eventData) {
                         logger.info(`📞 Звонок от: ${inboundCall.from?.phoneNumber || 'Неизвестно'}`);
                         logger.info(`📞 Статус: ${inboundCall.status.code}`);
                         
-                        // Принимаем звонки в любом состоянии, SIP обработчик должен справиться
+                        // ✅ Автоматически принимаем звонок только в статусе Ringing
                         logger.info('🤖 Автоматически принимаем звонок через API...');
                         
                         // Принудительно принимаем звонок
-                        await forceAnswerCall(body.sessionId);
+                        const success = await forceAnswerCall(body.sessionId);
+                        if (success) {
+                            logger.info(`✅ Звонок успешно принят!`);
+                        } else {
+                            logger.warn(`⚠️ Не удалось принять звонок`);
+                        }
+                    } else {
+                        // Проверяем, есть ли звонки в других статусах
+                        const otherInboundCall = body.parties.find(party => 
+                            party.direction === 'Inbound' && 
+                            party.status && 
+                            ['Setup', 'Proceeding'].includes(party.status.code) &&
+                            !party.missedCall
+                        );
+                        
+                        if (otherInboundCall) {
+                            logger.info(`📞 Ожидаем статус Ringing, текущий: ${otherInboundCall.status.code}`);
+                        }
                     }
                 }
             }
@@ -1212,8 +1232,28 @@ function initializeWebSocketServer() {
             const eventData = req.body;
             logger.info('📞 Получено webhook событие от Python сервера');
             
-            // Обрабатываем webhook событие
-            handleWebhookEvent(eventData);
+                    // ✅ Проверяем, не обрабатывали ли уже этот звонок
+        const callKey = `${eventData.body?.sessionId || eventData.body?.telephonySessionId}_${eventData.body?.parties?.[0]?.id}`;
+        
+        if (callKey && callKey !== 'undefined_undefined') {
+            if (processedCalls.has(callKey)) {
+                logger.info(`🔄 Звонок ${callKey} уже обрабатывается, пропускаем`);
+                res.status(200).json({ status: 'already_processed' });
+                return;
+            }
+            
+            // Добавляем в обработанные
+            processedCalls.add(callKey);
+            
+            // Устанавливаем таймер для очистки через 30 секунд
+            setTimeout(() => {
+                processedCalls.delete(callKey);
+                logger.info(`🗑️ Звонок ${callKey} удален из обработанных`);
+            }, 30000);
+        }
+        
+        // Обрабатываем webhook событие
+        handleWebhookEvent(eventData);
             
             res.status(200).json({ status: 'ok' });
         } catch (error) {
@@ -1397,18 +1437,17 @@ async function forceAnswerCall(sessionId) {
     try {
         logger.info(`🔄 Принудительный прием звонка через Call Control API: ${sessionId}`);
         
-        // Сначала получаем информацию о сессии
-        const sessionResponse = await platform.get(`/restapi/v1.0/account/~/telephony/sessions/${sessionId}`);
+        // Получаем информацию о сессии
+        const sessionResponse = await platform.get(`/restapi/v1.0/account/~/extension/~/telephony/sessions/${sessionId}`);
         const sessionInfo = await sessionResponse.json();
         
         logger.info('📋 Информация о сессии:', JSON.stringify(sessionInfo, null, 2));
         
-        // Находим party ID для входящего звонка
-        // Принимаем звонки ТОЛЬКО в состоянии "Ringing"
+        // Находим party ID для входящего звонка - только в статусе Ringing
         const inboundParty = sessionInfo.parties.find(party => 
             party.direction === 'Inbound' && 
             party.status && 
-            party.status.code === 'Ringing' &&
+            party.status.code === 'Ringing' &&  // ✅ Только Ringing статус
             !party.missedCall
         );
         
@@ -1422,7 +1461,7 @@ async function forceAnswerCall(sessionId) {
             
             if (!deviceId) {
                 logger.error('❌ Device ID не найден для приема звонка');
-                return;
+                return false;
             }
             
             const answerBody = {
@@ -1431,17 +1470,20 @@ async function forceAnswerCall(sessionId) {
             
             logger.info(`📱 Принимаем звонок на устройство: ${deviceId}`);
             
-            // Принимаем звонок через Call Control API с deviceId
+            // ✅ ПРАВИЛЬНЫЙ endpoint с extension
             const answerResponse = await platform.post(
-                `/restapi/v1.0/account/~/telephony/sessions/${sessionId}/parties/${partyId}/answer`,
+                `/restapi/v1.0/account/~/extension/~/telephony/sessions/${sessionId}/parties/${partyId}/answer`,
                 answerBody
             );
             const answerResult = await answerResponse.json();
             
             logger.info('✅ Звонок принудительно принят через Call Control API');
             logger.info('📋 Результат приема:', JSON.stringify(answerResult, null, 2));
+            
+            return true;
         } else {
-            logger.warn('⚠️ Входящий звонок не найден в сессии');
+            logger.warn('⚠️ Входящий звонок в статусе Ringing не найден');
+            return false;
         }
         
     } catch (error) {
@@ -1450,6 +1492,7 @@ async function forceAnswerCall(sessionId) {
             logger.error(`❌ HTTP Status: ${error.response.status}`);
             logger.error(`❌ Response: ${JSON.stringify(error.response.data, null, 2)}`);
         }
+        return false;
     }
 }
 
