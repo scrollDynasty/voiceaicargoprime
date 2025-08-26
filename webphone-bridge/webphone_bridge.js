@@ -19,8 +19,251 @@ global.WebSocket = WebSocket;
 global.navigator = global.navigator || {
     userAgent: 'RingCentral-WebPhone-Bridge/1.0.0 (Node.js)',
     appName: 'RingCentral WebPhone Bridge',
-    appVersion: '1.0.0'
+    appVersion: '1.0.0',
+    mediaDevices: {
+        getUserMedia: () => Promise.reject(new Error('getUserMedia недоступен в Node.js')),
+        enumerateDevices: () => Promise.resolve([])
+    }
 };
+
+// WebRTC полифиллы для Node.js (необходимы для WebPhone)
+class MockRTCPeerConnection {
+    constructor(config) {
+        this.localDescription = null;
+        this.remoteDescription = null;
+        this.iceConnectionState = 'new';
+        this.iceGatheringState = 'new';
+        this.signalingState = 'stable';
+        this.onicecandidate = null;
+        this.oniceconnectionstatechange = null;
+        this.onsignalingstatechange = null;
+        this.ondatachannel = null;
+        this.ontrack = null;
+        this._localStreams = [];
+        this._remoteStreams = [];
+    }
+
+    async createOffer(options) {
+        console.log('🔧 MockRTCPeerConnection: createOffer вызван');
+        return {
+            type: 'offer',
+            sdp: 'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n'
+        };
+    }
+
+    async createAnswer(options) {
+        console.log('🔧 MockRTCPeerConnection: createAnswer вызван');
+        return {
+            type: 'answer',
+            sdp: 'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n'
+        };
+    }
+
+    async setLocalDescription(desc) {
+        console.log('🔧 MockRTCPeerConnection: setLocalDescription вызван');
+        this.localDescription = desc;
+    }
+
+    async setRemoteDescription(desc) {
+        console.log('🔧 MockRTCPeerConnection: setRemoteDescription вызван');
+        this.remoteDescription = desc;
+    }
+
+    addIceCandidate(candidate) {
+        console.log('🔧 MockRTCPeerConnection: addIceCandidate вызван');
+        return Promise.resolve();
+    }
+
+    addStream(stream) {
+        console.log('🔧 MockRTCPeerConnection: addStream вызван');
+        this._localStreams.push(stream);
+    }
+
+    removeStream(stream) {
+        console.log('🔧 MockRTCPeerConnection: removeStream вызван');
+        const index = this._localStreams.indexOf(stream);
+        if (index > -1) {
+            this._localStreams.splice(index, 1);
+        }
+    }
+
+    getLocalStreams() {
+        return this._localStreams;
+    }
+
+    getRemoteStreams() {
+        return this._remoteStreams;
+    }
+
+    close() {
+        console.log('🔧 MockRTCPeerConnection: close вызван');
+        this.iceConnectionState = 'closed';
+    }
+
+    createDataChannel(label, options) {
+        console.log('🔧 MockRTCPeerConnection: createDataChannel вызван');
+        return new MockRTCDataChannel(label);
+    }
+}
+
+class MockRTCDataChannel {
+    constructor(label) {
+        this.label = label;
+        this.readyState = 'connecting';
+        this.onopen = null;
+        this.onclose = null;
+        this.onmessage = null;
+        this.onerror = null;
+    }
+
+    send(data) {
+        console.log('🔧 MockRTCDataChannel: send вызван');
+    }
+
+    close() {
+        console.log('🔧 MockRTCDataChannel: close вызван');
+        this.readyState = 'closed';
+    }
+}
+
+class MockMediaStream {
+    constructor(tracks = []) {
+        this.id = Math.random().toString(36).substr(2, 9);
+        this._tracks = tracks;
+        this.active = true;
+    }
+
+    getTracks() {
+        return this._tracks;
+    }
+
+    getAudioTracks() {
+        return this._tracks.filter(track => track.kind === 'audio');
+    }
+
+    getVideoTracks() {
+        return this._tracks.filter(track => track.kind === 'video');
+    }
+
+    addTrack(track) {
+        this._tracks.push(track);
+    }
+
+    removeTrack(track) {
+        const index = this._tracks.indexOf(track);
+        if (index > -1) {
+            this._tracks.splice(index, 1);
+        }
+    }
+
+    clone() {
+        return new MockMediaStream([...this._tracks]);
+    }
+}
+
+class MockMediaStreamTrack {
+    constructor(kind = 'audio') {
+        this.kind = kind;
+        this.id = Math.random().toString(36).substr(2, 9);
+        this.label = `Mock ${kind} track`;
+        this.enabled = true;
+        this.muted = false;
+        this.readyState = 'live';
+    }
+
+    stop() {
+        this.readyState = 'ended';
+    }
+
+    clone() {
+        return new MockMediaStreamTrack(this.kind);
+    }
+}
+
+// Устанавливаем глобальные WebRTC объекты
+global.RTCPeerConnection = MockRTCPeerConnection;
+global.RTCDataChannel = MockRTCDataChannel;
+global.MediaStream = MockMediaStream;
+global.MediaStreamTrack = MockMediaStreamTrack;
+
+// Дополнительные WebRTC полифиллы
+global.RTCIceCandidate = class RTCIceCandidate {
+    constructor(candidateInitDict) {
+        this.candidate = candidateInitDict?.candidate || '';
+        this.sdpMid = candidateInitDict?.sdpMid || null;
+        this.sdpMLineIndex = candidateInitDict?.sdpMLineIndex || null;
+    }
+};
+
+global.RTCSessionDescription = class RTCSessionDescription {
+    constructor(descriptionInitDict) {
+        this.type = descriptionInitDict?.type || '';
+        this.sdp = descriptionInitDict?.sdp || '';
+    }
+};
+
+// Audio Context полифилл
+global.AudioContext = global.AudioContext || class MockAudioContext {
+    constructor() {
+        this.state = 'running';
+        this.sampleRate = 44100;
+        this.currentTime = 0;
+        this.destination = {};
+    }
+
+    createMediaStreamSource(stream) {
+        return {
+            connect: () => {},
+            disconnect: () => {}
+        };
+    }
+
+    createGain() {
+        return {
+            gain: { value: 1 },
+            connect: () => {},
+            disconnect: () => {}
+        };
+    }
+
+    createAnalyser() {
+        return {
+            fftSize: 2048,
+            frequencyBinCount: 1024,
+            connect: () => {},
+            disconnect: () => {},
+            getByteFrequencyData: () => {},
+            getByteTimeDomainData: () => {}
+        };
+    }
+
+    close() {
+        this.state = 'closed';
+        return Promise.resolve();
+    }
+};
+
+// Window объект для совместимости
+global.window = global.window || {
+    location: { href: 'http://localhost' },
+    document: { 
+        createElement: () => ({ 
+            canPlayType: () => '',
+            play: () => Promise.resolve(),
+            pause: () => {},
+            load: () => {}
+        }),
+        addEventListener: () => {},
+        removeEventListener: () => {}
+    },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    RTCPeerConnection: global.RTCPeerConnection,
+    MediaStream: global.MediaStream,
+    AudioContext: global.AudioContext
+};
+
+console.log('✅ WebRTC полифиллы для Node.js установлены успешно');
 
 // Настройка логирования
 const logger = winston.createLogger({
