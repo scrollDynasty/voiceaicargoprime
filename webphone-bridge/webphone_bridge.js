@@ -101,6 +101,9 @@ async function initializeRingCentral() {
         logger.info(`📞 Расширение: ${extension.extensionNumber}`);
         logger.info(`👤 Пользователь: ${extension.name}`);
         
+        // Device ID будет получен при первой регистрации через SIP Provision API
+        logger.info('📱 Device ID будет получен при регистрации через SIP Provision API');
+        
         return true;
     } catch (error) {
         logger.error(`❌ Ошибка инициализации RingCentral: ${error.message}`);
@@ -307,11 +310,16 @@ async function initializeWebPhone() {
                     }
                 }
                 
-                // Принудительно устанавливаем флаг регистрации, если WebSocket соединение активно
-                if (webPhone.sipClient && webPhone.sipClient.wsc && webPhone.sipClient.wsc.readyState === 1) {
-                    logger.info('✅ WebSocket соединение активно, устанавливаем флаг регистрации');
-                    isWebPhoneRegistered = true;
-                }
+                        // Принудительно устанавливаем флаг регистрации, если WebSocket соединение активно
+        if (webPhone.sipClient && webPhone.sipClient.wsc && webPhone.sipClient.wsc.readyState === 1) {
+            logger.info('✅ WebSocket соединение активно, устанавливаем флаг регистрации');
+            isWebPhoneRegistered = true;
+            
+            // Принудительная регистрация устройства через API
+            setTimeout(() => {
+                forceDeviceRegistration();
+            }, 1000);
+        }
             }, 2000);
             
         } catch (error) {
@@ -1025,6 +1033,14 @@ function startHealthCheck() {
                     if (webPhone && webPhone.sipClient && webPhone.sipClient.wsc && webPhone.sipClient.wsc.readyState === 1) {
                         logger.info('✅ WebSocket соединение активно, принудительно устанавливаем флаг регистрации');
                         isWebPhoneRegistered = true;
+                        
+                        // Если WebPhone не зарегистрирован, попробуем принудительную регистрацию
+                        if (!isWebPhoneRegistered) {
+                            logger.info('🔄 Попытка принудительной регистрации через API...');
+                            setTimeout(() => {
+                                forceDeviceRegistration();
+                            }, 2000);
+                        }
                     } else {
                         // Даем больше времени на регистрацию перед переподключением
                         const timeSinceStart = Date.now() - (lastHealthCheck || Date.now());
@@ -1061,6 +1077,87 @@ function startHealthCheck() {
     }, config.healthCheckInterval);
     
     logger.info(`🩺 Мониторинг здоровья запущен (интервал: ${config.healthCheckInterval}ms)`);
+}
+
+/**
+ * Принудительная регистрация устройства через RingCentral API
+ */
+async function forceDeviceRegistration() {
+    try {
+        logger.info('🔄 Принудительная регистрация устройства через SIP Provision API...');
+        
+        // Используем правильный API endpoint для регистрации устройства
+        const body = {
+            sipInfo: [
+                {
+                    transport: 'WSS'
+                }
+            ]
+        };
+        
+        logger.info('📋 Отправляем запрос на регистрацию:', JSON.stringify(body, null, 2));
+        
+        // Регистрация устройства через SIP Provision API
+        const response = await platform.post('/restapi/v1.0/client-info/sip-provision', body);
+        const result = await response.json();
+        
+        logger.info('✅ Устройство успешно зарегистрировано через SIP Provision API');
+        logger.info('📋 Результат регистрации:', JSON.stringify(result, null, 2));
+        
+        // Обновляем deviceId если он изменился
+        if (result.device && result.device.id) {
+            config.deviceId = result.device.id;
+            logger.info(`📱 Обновлен Device ID: ${config.deviceId}`);
+        }
+        
+        // Устанавливаем флаг регистрации
+        isWebPhoneRegistered = true;
+        
+        // Обновляем SIP данные для WebPhone
+        if (result.sipInfo && result.sipInfo[0]) {
+            logger.info('🔄 Обновляем SIP данные WebPhone...');
+            await updateWebPhoneWithNewSipData(result.sipInfo[0]);
+        }
+        
+    } catch (error) {
+        logger.error(`❌ Ошибка принудительной регистрации устройства: ${error.message}`);
+        if (error.response) {
+            logger.error(`❌ HTTP Status: ${error.response.status}`);
+            logger.error(`❌ Response: ${JSON.stringify(error.response.data, null, 2)}`);
+        }
+    }
+}
+
+/**
+ * Обновление WebPhone с новыми SIP данными
+ */
+async function updateWebPhoneWithNewSipData(newSipInfo) {
+    try {
+        logger.info('🔄 Обновление WebPhone с новыми SIP данными...');
+        
+        if (!webPhone || !webPhone.sipClient) {
+            logger.warn('⚠️ WebPhone не инициализирован, пропускаем обновление');
+            return;
+        }
+        
+        // Обновляем SIP данные в sipClient
+        if (webPhone.sipClient.sipInfo) {
+            webPhone.sipClient.sipInfo = [newSipInfo];
+            logger.info('✅ SIP данные обновлены в sipClient');
+        }
+        
+        // Принудительно перерегистрируем sipClient
+        if (webPhone.sipClient.register) {
+            await webPhone.sipClient.register();
+            logger.info('✅ sipClient перерегистрирован с новыми данными');
+        }
+        
+        // Устанавливаем флаг регистрации
+        isWebPhoneRegistered = true;
+        
+    } catch (error) {
+        logger.error(`❌ Ошибка обновления WebPhone: ${error.message}`);
+    }
 }
 
 /**
