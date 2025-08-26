@@ -270,7 +270,12 @@ def ringcentral_webhook():
         # Извлекаем body из webhook payload
         body = webhook_data.get('body', {})
         
-        # Проверяем наличие telephonySessionId для telephony событий
+        # Явная обработка события telephony-session-event
+        if event_type == 'telephony-session-event':
+            logger.info("📞 Обнаружено событие telephony-session-event")
+            return _handle_telephony_session(body)
+        
+        # Проверяем наличие telephonySessionId для telephony событий (fallback)
         if body.get('telephonySessionId'):
             logger.info(f"📞 Обрабатываем telephony событие")
             return _handle_telephony_session(body)
@@ -389,11 +394,11 @@ def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
                 with call_lock:
                     active_calls[call_data["callId"]] = call_data
                 
-                # Обрабатываем звонок в фоновом потоке
-                thread = threading.Thread(target=process_call, args=(call_data,))
+                # Обрабатываем звонок в фоновом потоке через VoiceAIEngine
+                thread = threading.Thread(target=_run_engine_for_call, args=(call_data,))
                 thread.daemon = True
                 thread.start()
-                logger.info(f"📋 Запущен фоновый поток для обработки звонка {call_data['callId']}")
+                logger.info(f"📋 Запущен VoiceAIEngine для звонка {call_data['callId']}")
                 
             elif direction == 'Inbound' and status.get('code') in ['Proceeding', 'Setup', 'Alerting']:
                 # Логируем входящие звонки в других состояниях без обработки
@@ -480,6 +485,25 @@ async def _answer_and_process_call(call_data: Dict[str, Any]):
             
     except Exception as e:
         logger.error(f"❌ Общая ошибка при ответе на звонок: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+def _run_engine_for_call(call_data: Dict[str, Any]):
+    """Запустить обработку звонка в VoiceAIEngine из синхронного контекста."""
+    try:
+        logger.info(f"🤖 Асинхронный запуск VoiceAIEngine: callId={call_data.get('callId')}")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            normalized = dict(call_data)
+            # Нормализуем ключи для engine
+            if 'sessionId' not in normalized and 'telephonySessionId' in normalized:
+                normalized['sessionId'] = normalized['telephonySessionId']
+            loop.run_until_complete(voice_ai_engine.handle_incoming_call(normalized))
+        finally:
+            loop.close()
+    except Exception as e:
+        logger.error(f"❌ Ошибка запуска VoiceAIEngine: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
 
@@ -672,7 +696,8 @@ async def _create_webhook_subscription():
         # ✅ Правильный фильтр событий согласно документации RingCentral
         # Wildcard фильтры не поддерживаются, используем только базовый
         event_filters = [
-            '/restapi/v1.0/account/~/extension/~/telephony/sessions'
+            '/restapi/v1.0/account/~/extension/~/telephony/sessions',
+            '/restapi/v1.0/account/~/extension/~/presence'
         ]
         
         # ✅ Рекомендуемая структура delivery_mode для RingCentral
