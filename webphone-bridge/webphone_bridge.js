@@ -110,6 +110,9 @@ async function initializeWebPhone() {
         // Получаем полные SIP данные
         const sipProvisionData = await getSipProvisionData();
         
+        // Извлекаем sipInfo из данных
+        const sipInfo = sipProvisionData.sipInfo[0];
+        
         // Создаем WebPhone инстанс с правильной структурой данных
         const webPhoneConfig = {
             logLevel: 1, // 0 = Trace, 1 = Debug, 2 = Info, 3 = Warn, 4 = Error
@@ -137,7 +140,13 @@ async function initializeWebPhone() {
         logger.info('✅ Создаем WebPhone с полными SIP данными...');
         
         // Создаем WebPhone с правильными параметрами согласно документации
-        webPhone = new WebPhone(sipProvisionData, webPhoneConfig);
+        // WebPhone конструктор ожидает объект с полем sipInfo
+        const webPhoneOptions = {
+            sipInfo: sipInfo,
+            ...webPhoneConfig
+        };
+        
+        webPhone = new WebPhone(webPhoneOptions);
         
         // Регистрация обработчиков событий
         setupWebPhoneEventHandlers();
