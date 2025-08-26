@@ -28,6 +28,10 @@ class MockMediaStreamTrack {
         this.onmute = null;
         this.onunmute = null;
         
+        // 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Контроль жизненного цикла трека
+        this._shouldStayAlive = true;  // Предотвращает преждевременную остановку
+        this._callActive = false;      // Отслеживает активный звонок
+        
         // Дополнительные свойства для совместимости
         if (kind === 'audio') {
             this.volume = 1.0;
@@ -40,11 +44,39 @@ class MockMediaStreamTrack {
     }
 
     stop() {
+        // 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Не останавливать треки во время активного звонка
+        if (this._callActive && this._shouldStayAlive) {
+            console.log(`🔧 MockMediaStreamTrack: попытка остановить ${this.kind} track ${this.id} - ИГНОРИРУЕМ (звонок активен)`);
+            return;
+        }
+        
         console.log(`🔧 MockMediaStreamTrack: остановлен ${this.kind} track ${this.id}`);
         this.readyState = 'ended';
         if (this.onended) {
             this.onended();
         }
+    }
+    
+    // 🔥 НОВЫЙ МЕТОД: Принудительная остановка после завершения звонка
+    forceStop() {
+        console.log(`🔧 MockMediaStreamTrack: принудительная остановка ${this.kind} track ${this.id}`);
+        this._shouldStayAlive = false;
+        this._callActive = false;
+        this.stop();
+    }
+    
+    // 🔥 НОВЫЙ МЕТОД: Пометить как активный во время звонка
+    markAsCallActive() {
+        console.log(`🔧 MockMediaStreamTrack: помечен как активный во время звонка ${this.kind} track ${this.id}`);
+        this._callActive = true;
+        this._shouldStayAlive = true;
+    }
+    
+    // 🔥 НОВЫЙ МЕТОД: Разрешить остановку после завершения звонка
+    allowStop() {
+        console.log(`🔧 MockMediaStreamTrack: разрешена остановка ${this.kind} track ${this.id}`);
+        this._callActive = false;
+        this._shouldStayAlive = false;
     }
 
     clone() {
@@ -774,6 +806,35 @@ async function initializeWebPhone() {
             });
         }
         
+        // 🔥 ГЛОБАЛЬНЫЕ ФУНКЦИИ УПРАВЛЕНИЯ MEDIASTREAM ТРЕКАМИ
+        function markAllTracksAsCallActive() {
+            console.log('🔧 Помечаем все активные треки как участвующие в звонке...');
+            // Ищем все MockMediaStreamTrack объекты и помечаем их как активные
+            if (global.MockMediaStream && global.MockMediaStream._allStreams) {
+                global.MockMediaStream._allStreams.forEach(stream => {
+                    stream.getTracks().forEach(track => {
+                        if (track.markAsCallActive) {
+                            track.markAsCallActive();
+                        }
+                    });
+                });
+            }
+        }
+        
+        function allowAllTracksToStop() {
+            console.log('🔧 Разрешаем остановку всех треков после завершения звонка...');
+            // Ищем все MockMediaStreamTrack объекты и разрешаем их остановку
+            if (global.MockMediaStream && global.MockMediaStream._allStreams) {
+                global.MockMediaStream._allStreams.forEach(stream => {
+                    stream.getTracks().forEach(track => {
+                        if (track.allowStop) {
+                            track.allowStop();
+                        }
+                    });
+                });
+            }
+        }
+        
         // 🔥 ОСНОВНОЙ ОБРАБОТЧИК АВТОПРИЕМА ЗВОНКОВ
         webPhone.on('inboundCall', async (inboundCallSession) => {
             const callId = inboundCallSession.callId || `call_${Date.now()}`;
@@ -795,6 +856,10 @@ async function initializeWebPhone() {
                     return;
                 }
 
+                // 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Помечаем треки как активные ДО приема звонка
+                console.log('🔧 Помечаем MediaStream треки как активные для предотвращения сброса...');
+                markAllTracksAsCallActive();
+                
                 // 🔥 АВТОМАТИЧЕСКИЙ ПРИЕМ
                 console.log('🤖 Автоматически принимаем звонок через WebPhone...');
                 await inboundCallSession.answer();
