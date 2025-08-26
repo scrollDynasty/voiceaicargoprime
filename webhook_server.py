@@ -30,9 +30,30 @@ from ringcentral_auth import make_request
 class MockVoiceAIEngine:
     def __init__(self):
         pass
+    
     def handle_call(self, *args, **kwargs):
         logger.info("🧪 MOCK: VoiceAI engine заглушка")
         return None
+    
+    async def handle_incoming_call(self, call_data):
+        """Mock implementation of handle_incoming_call for testing"""
+        logger.info("🧪 MOCK: Handling incoming call with VoiceAI engine заглушка")
+        logger.info(f"🧪 MOCK: Call data: {call_data}")
+        
+        # Simulate processing the call
+        call_id = call_data.get("callId", "unknown")
+        phone_number = call_data.get("from", {}).get("phoneNumber", "unknown")
+        
+        logger.info(f"🧪 MOCK: Processing call {call_id} from {phone_number}")
+        
+        # Return a mock successful response
+        return {
+            "status": "success",
+            "message": "Call handled by mock AI engine",
+            "call_id": call_id,
+            "actions": ["answered", "processing"]
+        }
+    
     def health_check(self):
         return {"status": "healthy", "message": "Mock AI engine is running"}
 
