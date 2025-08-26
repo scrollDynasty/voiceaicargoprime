@@ -263,6 +263,17 @@ async function initializeWebPhone() {
             if (webPhone.start) {
                 await webPhone.start();
                 logger.info('✅ WebPhone запущен через webPhone.start()');
+                
+                // КРИТИЧНО: Принудительная регистрация после запуска
+                logger.info('🔄 Инициируем принудительную SIP регистрацию...');
+                if (webPhone.sipClient && webPhone.sipClient.register) {
+                    await webPhone.sipClient.register();
+                    logger.info('✅ SIP регистрация инициирована через sipClient.register()');
+                } else if (webPhone.userAgent && webPhone.userAgent.register) {
+                    await webPhone.userAgent.register();
+                    logger.info('✅ SIP регистрация инициирована через userAgent.register()');
+                }
+                
             } else if (webPhone.register) {
                 await webPhone.register();
                 logger.info('✅ WebPhone зарегистрирован через webPhone.register()');
@@ -312,12 +323,14 @@ async function initializeWebPhone() {
 }
 
 /**
- * Получение ПОЛНЫХ SIP данных для WebPhone (ИСПРАВЛЕНО)
+ * Получение SIP данных и регистрация устройства для WebPhone
  */
 async function getSipProvisionData() {
     try {
-        logger.info('🔍 Получение SIP данных для WebPhone...');
+        logger.info('🔍 Начинаем процесс регистрации SIP устройства...');
         
+        // Шаг 1: Регистрируем устройство через SIP provision API
+        logger.info('📱 Регистрация устройства в RingCentral...');
         const response = await platform.post('/restapi/v1.0/client-info/sip-provision', {
             sipInfo: [{
                 transport: 'WSS'
@@ -327,31 +340,183 @@ async function getSipProvisionData() {
         const data = await response.json();
         console.log('🔍 ПОЛНЫЕ SIP ДАННЫЕ:', JSON.stringify(data, null, 2));
         
-        // ИСПРАВЛЕНИЕ: Возвращаем ВСЮ структуру данных, а не только sipInfo[0]
+        // Валидация ответа
         if (!data.sipInfo || !data.sipInfo[0]) {
             throw new Error('SIP данные не содержат необходимую информацию');
         }
         
-        const sipInfo = data.sipInfo[0];
+        if (!data.device) {
+            throw new Error('Ответ не содержит информацию об устройстве');
+        }
         
-        // Проверяем наличие обязательных полей
+        const sipInfo = data.sipInfo[0];
+        const deviceInfo = data.device;
+        
+        // Проверяем наличие обязательных полей в SIP данных
         if (!sipInfo.username || !sipInfo.password || !sipInfo.domain) {
             logger.error('❌ SIP данные неполные:', sipInfo);
             throw new Error('SIP данные не содержат username, password или domain');
         }
         
-        logger.info('✅ SIP данные получены успешно');
+        // Шаг 2: Проверяем статус устройства
+        logger.info('🔍 Проверка статуса зарегистрированного устройства...');
+        logger.info(`📱 Device ID: ${deviceInfo.id}`);
+        logger.info(`📱 Device Type: ${deviceInfo.type}`);
+        logger.info(`📱 Device Status: ${deviceInfo.status}`);
+        logger.info(`📱 Extension: ${deviceInfo.extension.extensionNumber}`);
+        
+        // Проверяем, что устройство в статусе Online
+        if (deviceInfo.status !== 'Online') {
+            logger.warn(`⚠️ Устройство не в статусе Online (текущий: ${deviceInfo.status})`);
+            // Пытаемся подождать и проверить снова
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            const statusCheckResponse = await platform.get(`/restapi/v1.0/account/~/device/${deviceInfo.id}`);
+            const updatedDevice = await statusCheckResponse.json();
+            logger.info(`📱 Обновленный статус устройства: ${updatedDevice.status}`);
+            
+            if (updatedDevice.status !== 'Online') {
+                logger.warn('⚠️ Устройство все еще не Online, но продолжаем...');
+            }
+        }
+        
+        // Шаг 3: Логируем успешную регистрацию
+        logger.info('✅ Устройство успешно зарегистрировано в RingCentral');
         logger.info(`🔧 SIP Username: ${sipInfo.username}`);
         logger.info(`🔧 SIP Domain: ${sipInfo.domain}`);
         logger.info(`🔧 SIP Proxy: ${sipInfo.outboundProxy}`);
+        logger.info(`🔧 Authorization ID: ${sipInfo.authorizationId}`);
         
-        // Возвращаем ПОЛНУЮ структуру данных для WebPhone
+        // Шаг 4: Сохраняем данные устройства для мониторинга
+        if (data.pollingInterval) {
+            logger.info(`⏰ Интервал переподключения: ${data.pollingInterval} мс`);
+            global.devicePollingInterval = data.pollingInterval;
+        }
+        
+        if (data.sipFlags) {
+            logger.info(`🚩 SIP Flags:`, data.sipFlags);
+            global.sipFlags = data.sipFlags;
+        }
+        
+        // Сохраняем Device ID для дальнейшего мониторинга
+        global.registeredDeviceId = deviceInfo.id;
+        global.deviceInfo = deviceInfo;
+        
+        logger.info('✅ SIP устройство полностью зарегистрировано и готово к работе');
         return data;
         
     } catch (error) {
-        logger.error(`❌ Ошибка получения SIP данных: ${error.message}`);
+        logger.error(`❌ Ошибка регистрации SIP устройства: ${error.message}`);
+        if (error.response) {
+            logger.error(`❌ HTTP Status: ${error.response.status}`);
+            logger.error(`❌ Response: ${JSON.stringify(error.response.data, null, 2)}`);
+        }
         throw error;
     }
+}
+
+/**
+ * Мониторинг статуса устройства и автоматическая перерегистрация
+ */
+async function monitorDeviceStatus() {
+    if (!global.registeredDeviceId) {
+        logger.warn('⚠️ Нет зарегистрированного Device ID для мониторинга');
+        return;
+    }
+    
+    try {
+        logger.info(`🔍 Проверка статуса устройства ${global.registeredDeviceId}...`);
+        
+        const response = await platform.get(`/restapi/v1.0/account/~/device/${global.registeredDeviceId}`);
+        const deviceStatus = await response.json();
+        
+        logger.info(`📱 Статус устройства: ${deviceStatus.status}`);
+        
+        if (deviceStatus.status !== 'Online') {
+            logger.warn(`⚠️ Устройство не в статусе Online: ${deviceStatus.status}`);
+            logger.info('🔄 Попытка перерегистрации устройства...');
+            
+            // Попытка перерегистрации
+            await attemptDeviceReregistration();
+        } else {
+            logger.info('✅ Устройство в статусе Online');
+        }
+        
+    } catch (error) {
+        logger.error(`❌ Ошибка проверки статуса устройства: ${error.message}`);
+        // Попытка перерегистрации при ошибке
+        await attemptDeviceReregistration();
+    }
+}
+
+/**
+ * Перерегистрация устройства при сбоях
+ */
+async function attemptDeviceReregistration() {
+    try {
+        logger.info('🔄 Начинаем перерегистрацию устройства...');
+        
+        // Останавливаем текущий WebPhone если есть
+        if (webPhone && webPhone.sipClient) {
+            try {
+                await webPhone.sipClient.stop();
+                logger.info('🛑 Текущий WebPhone остановлен');
+            } catch (stopError) {
+                logger.warn(`⚠️ Ошибка остановки WebPhone: ${stopError.message}`);
+            }
+        }
+        
+        // Перерегистрируем устройство
+        const sipProvisionData = await getSipProvisionData();
+        
+        // Пересоздаем WebPhone с новыми данными
+        const sipInfo = sipProvisionData.sipInfo[0];
+        
+        const webPhoneOptions = {
+            sipInfo: sipInfo,
+            logLevel: 1,
+            audioHelper: { enabled: true },
+            media: { remote: null, local: null },
+            appName: 'RingCentral WebPhone Bridge',
+            appVersion: '1.0.0',
+            userAgent: 'RingCentral-WebPhone-Bridge/1.0.0'
+        };
+        
+        webPhone = new WebPhone(webPhoneOptions);
+        
+        // Настраиваем обработчики событий
+        setupWebPhoneEventHandlers();
+        
+        // Запускаем WebPhone
+        await webPhone.start();
+        
+        // Принудительная регистрация
+        if (webPhone.sipClient && webPhone.sipClient.register) {
+            await webPhone.sipClient.register();
+        }
+        
+        logger.info('✅ Устройство успешно перерегистрировано');
+        
+    } catch (error) {
+        logger.error(`❌ Ошибка перерегистрации устройства: ${error.message}`);
+        
+        // Попытка снова через некоторое время
+        setTimeout(() => {
+            attemptDeviceReregistration();
+        }, 30000); // Повторить через 30 секунд
+    }
+}
+
+/**
+ * Запуск периодического мониторинга устройства
+ */
+function startDeviceMonitoring() {
+    const interval = global.devicePollingInterval || 300000; // По умолчанию 5 минут
+    logger.info(`⏰ Запуск мониторинга устройства с интервалом ${interval/1000} секунд`);
+    
+    setInterval(async () => {
+        await monitorDeviceStatus();
+    }, interval);
 }
 
 /**
@@ -836,7 +1001,12 @@ function getWebPhoneStatus() {
         userAgentExists: !!(webPhone && webPhone.userAgent),
         sipClientExists: !!(webPhone && webPhone.sipClient),
         activeCalls: activeCalls.size,
-        maxCalls: config.maxConcurrentCalls
+        maxCalls: config.maxConcurrentCalls,
+        // Добавляем информацию об устройстве
+        deviceRegistered: !!global.registeredDeviceId,
+        deviceId: global.registeredDeviceId || null,
+        deviceStatus: global.deviceInfo ? global.deviceInfo.status : 'unknown',
+        pollingInterval: global.devicePollingInterval || null
     };
     
     if (webPhone && webPhone.userAgent) {
@@ -953,6 +1123,9 @@ async function main() {
     
     // Запуск мониторинга здоровья
     startHealthCheck();
+    
+    // Запуск мониторинга устройства
+    startDeviceMonitoring();
     
     // Устанавливаем флаг готовности
     isRunning = true;
