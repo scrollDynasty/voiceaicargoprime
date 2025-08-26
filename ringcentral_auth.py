@@ -226,7 +226,7 @@ class RingCentralAuth:
         except Exception as e:
             logger.warning(f"⚠️ Не удалось сохранить refresh token: {e}")
     
-    def make_request(self, method, endpoint, data=None):
+    def make_request(self, method, endpoint, data=None, files=None):
         """Выполняем авторизованный запрос"""
         if not self.is_authenticated:
             if not self.authenticate():
@@ -240,9 +240,12 @@ class RingCentralAuth:
                     raise Exception("Не удалось обновить токен")
         
         headers = {
-            'Authorization': f'Bearer {self.access_token}',
-            'Content-Type': 'application/json'
+            'Authorization': f'Bearer {self.access_token}'
         }
+        
+        # Добавляем Content-Type только если не передаем файлы
+        if not files:
+            headers['Content-Type'] = 'application/json'
         
         url = f"{self.server_url}{endpoint}"
         
@@ -252,7 +255,10 @@ class RingCentralAuth:
             if method.upper() == 'GET':
                 response = requests.get(url, headers=headers)
             elif method.upper() == 'POST':
-                response = requests.post(url, headers=headers, json=data)
+                if files:
+                    response = requests.post(url, headers=headers, files=files, data=data)
+                else:
+                    response = requests.post(url, headers=headers, json=data)
             elif method.upper() == 'PUT':
                 response = requests.put(url, headers=headers, json=data)
             elif method.upper() == 'DELETE':
@@ -301,10 +307,10 @@ def authenticate():
     auth = get_auth()
     return auth.authenticate()
 
-def make_request(method, endpoint, data=None):
+def make_request(method, endpoint, data=None, files=None):
     """Выполняем авторизованный запрос"""
     auth = get_auth()
-    return auth.make_request(method, endpoint, data)
+    return auth.make_request(method, endpoint, data, files)
 
 def get_auth_status():
     """Получаем статус авторизации"""
