@@ -5,7 +5,7 @@
 
 require('dotenv').config();
 const SDK = require('@ringcentral/sdk').SDK;
-const WebPhone = require('ringcentral-web-phone');
+const WebPhone = require('ringcentral-web-phone').default;
 const axios = require('axios');
 const WebSocket = require('ws');
 const winston = require('winston');
@@ -107,8 +107,8 @@ async function initializeWebPhone() {
         // Получаем SIP данные
         const sipInfo = await getSipProvisionData();
         
-        // Создаем WebPhone инстанс с новой версией API
-        webPhone = new WebPhone({
+        // Создаем WebPhone инстанс с правильной структурой данных
+        const webPhoneConfig = {
             platform: platform,
             logLevel: 1, // 0 = Trace, 1 = Debug, 2 = Info, 3 = Warn, 4 = Error
             audioHelper: {
@@ -123,8 +123,25 @@ async function initializeWebPhone() {
                     audio: true,
                     video: false
                 }
-            }
-        }, sipInfo);
+            },
+            // Настройки для автоматического приема звонков
+            autoAnswer: true,
+            enableQos: true
+        };
+        
+        logger.info('🔧 Конфигурация WebPhone:', JSON.stringify(webPhoneConfig, null, 2));
+        logger.info('🔧 SIP данные для WebPhone:', JSON.stringify(sipInfo, null, 2));
+        
+        // Проверяем, что sipInfo содержит нужные поля
+        if (!sipInfo.username) {
+            logger.error('❌ sipInfo не содержит username:', sipInfo);
+            throw new Error('SIP данные не содержат username');
+        }
+        
+        logger.info('✅ SIP данные корректны, создаем WebPhone...');
+        
+        // Создаем WebPhone с правильными параметрами согласно документации
+        webPhone = new WebPhone(sipInfo, webPhoneConfig);
         
         // Регистрация обработчиков событий
         setupWebPhoneEventHandlers();
@@ -142,6 +159,8 @@ async function initializeWebPhone() {
  */
 async function getSipProvisionData() {
     try {
+        logger.info('🔍 Получение SIP данных для WebPhone...');
+        
         const response = await platform.post('/restapi/v1.0/client-info/sip-provision', {
             sipInfo: [{
                 transport: 'WSS'
@@ -149,7 +168,32 @@ async function getSipProvisionData() {
         });
         
         const data = await response.json();
-        return data.sipInfo[0];
+        console.log('🔍 СЫРЫЕ SIP ДАННЫЕ:', JSON.stringify(data, null, 2));
+        logger.info('📋 Полученные SIP данные:', JSON.stringify(data, null, 2));
+        logger.info('🔍 Структура данных:', Object.keys(data));
+        if (data.sipInfo && data.sipInfo[0]) {
+            logger.info('🔍 Поля sipInfo[0]:', Object.keys(data.sipInfo[0]));
+            logger.info('🔍 Значения sipInfo[0]:', data.sipInfo[0]);
+        } else {
+            logger.error('❌ sipInfo отсутствует или пустой');
+            logger.error('❌ Полный ответ:', data);
+        }
+        
+        if (!data.sipInfo || !data.sipInfo[0]) {
+            throw new Error('SIP данные не содержат необходимую информацию');
+        }
+        
+        const sipInfo = data.sipInfo[0];
+        
+        // Проверяем наличие обязательных полей
+        if (!sipInfo.username || !sipInfo.password || !sipInfo.domain) {
+            logger.error('❌ SIP данные неполные:', sipInfo);
+            throw new Error('SIP данные не содержат username, password или domain');
+        }
+        
+        logger.info('✅ SIP данные получены успешно');
+        return sipInfo;
+        
     } catch (error) {
         logger.error(`❌ Ошибка получения SIP данных: ${error.message}`);
         throw error;
