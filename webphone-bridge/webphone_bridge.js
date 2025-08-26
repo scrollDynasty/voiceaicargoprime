@@ -15,6 +15,13 @@ const express = require('express');
 // WebSocket полифилл для Node.js
 global.WebSocket = WebSocket;
 
+// Navigator полифилл для Node.js (необходим для WebPhone)
+global.navigator = global.navigator || {
+    userAgent: 'RingCentral-WebPhone-Bridge/1.0.0 (Node.js)',
+    appName: 'RingCentral WebPhone Bridge',
+    appVersion: '1.0.0'
+};
+
 // Настройка логирования
 const logger = winston.createLogger({
     level: process.env.LOG_LEVEL || 'info',
@@ -34,7 +41,7 @@ const logger = winston.createLogger({
 const config = {
     clientId: process.env.RINGCENTRAL_CLIENT_ID || 'bXCZ510zNmybxAUXGIZruT',
     clientSecret: process.env.RINGCENTRAL_CLIENT_SECRET || '10hW9ccNfhyc1y69bQzdgnVUnFyf76B6qcmwOtypEGo7',
-    jwtToken: process.env.RINGCENTRAL_JWT_TOKEN || 'eyJraWQiOiI4NzYyZjU5OGQwNTk0NGRiODZiZjVjYTk3ODA0NzYwOCIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJhdWQiOiJodHRwczovL3BsYXRmb3JtLnJpbmdjZW50cmFsLmNvbSIsInN1YiI6IjE4NjE3NjYwMTkiLCJhdXRoX3RpbWUiOjE3MjQ2Nzk3MjMsImlzcyI6Imh0dHBzOi8vcGxhdGZvcm0ucmluZ2NlbnRyYWwuY29tIiwiZXhwIjoxNzI3Mjc3NDI5LCJpYXQiOjE3MjQ2ODUyMjl9.NjuNyKI49c9AO_KAKZLyqQZg8COpHX7s_UwOF5KOQ5QzYV1y6GW2M2IiMFCaYS2zq-F-OX4d0vBJLO-VyIfgNYz_GEhPFHBr_KeBadZKj5sE7ySdJI5_bSF8vBdQ0jHx0vGgpyT3bHFe7rKQv8wKbJU4XyHJ-OMCkCsKzBu6_VN2HNVgZxNGqOQvN8_vLAj_0vI3vJh8KYgGkPzI5Tn2_8XPLdJ4KfYuG2f8qLh-0-O7DaGTXQrpJH8pO4Rz6U-2AQRzJ9Uw1xHxQVL8XNl2-IYRU0OQXWv1gSZL-vUe3GK5YYqOBzA',
+    jwtToken: process.env.RINGCENTRAL_JWT_TOKEN || 'eyJraWQiOiI4NzYyZjU5OGQwNTk0NGRiODZiZjVjYTk3ODA0NzYwOCIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJhdWQiOiJodHRwczovL3BsYXRmb3JtLnJpbmdjZW50cmFsLmNvbS9yZXN0YXBpL29hdXRoL3Rva2VuIiwic3ViIjoiMjA2OTkwOTAxOSIsImlzcyI6Imh0dHBzOi8vcGxhdGZvcm0ucmluZ2NlbnRyYWwuY29tIiwiZXhwIjozOTAzNjUxMzQyLCJpYXQiOjE3NTYxNjc2OTUsImp0aSI6IlpTckJuOHlFVDJLeEFjOXhmTlZ6ZncifQ.fHF6mXLa9wHygLYiFVQzIo4bKT8niwnYKD7PT7gFGoayZpDOkHwamesmXunn_IIY3rRT9Z2hXHgaJpdpW5ZRimaYOydcjGpj1HgdOxmTRBcYj6B4HWXb9YXO95Q2sfFLPS-3DwvcxeqNW8yoX3Cx31VpCfsybrvwq1NtDO73KulJYPByTSjoLQMj5to5gxRtKlqbhabj1o4YaeKkKb70_Sr-T0lXQS_93fOaPi0xP_AYNhDmDEQBZc1tvwUF7-ETj2Bv-EnfH5OxWfbRS3bSnZdRs1P-0TJg6SfNgwlAGNnMqEdpVyBMXt-02aQA8xgo1O9RDI-nSUXd2iKaA5CTAg',
     server: process.env.RINGCENTRAL_SERVER || 'https://platform.ringcentral.com',
     pythonServer: process.env.PYTHON_AI_SERVER || 'http://localhost:5000',
     pythonEndpoint: process.env.PYTHON_AI_ENDPOINT || '/api/handle-webphone-call',
@@ -150,14 +157,8 @@ async function initializeWebPhone() {
                 enabled: true
             },
             media: {
-                remote: {
-                    audio: true,
-                    video: false
-                },
-                local: {
-                    audio: true,
-                    video: false
-                }
+                remote: null, // В headless режиме без DOM элементов
+                local: null
             }
         };
         
@@ -172,22 +173,42 @@ async function initializeWebPhone() {
             sipInfo: sipInfo,
             logLevel: webPhoneConfig.logLevel,
             audioHelper: webPhoneConfig.audioHelper,
-            media: webPhoneConfig.media
+            media: webPhoneConfig.media,
+            appName: 'RingCentral WebPhone Bridge',
+            appVersion: '1.0.0',
+            userAgent: 'RingCentral-WebPhone-Bridge/1.0.0'
         };
         
         logger.info('🔧 WebPhone опции:', JSON.stringify(webPhoneOptions, null, 2));
         
         // Попробуем создать WebPhone с правильной структурой
         try {
+            logger.info('🔧 Создаем WebPhone с расширенными опциями...');
             webPhone = new WebPhone(webPhoneOptions);
         } catch (error) {
             logger.error(`❌ Ошибка создания WebPhone: ${error.message}`);
-            // Попробуем альтернативный способ
+            logger.error(`❌ Stack trace: ${error.stack}`);
+            
+            // Попробуем альтернативный способ с минимальными опциями
             logger.info('🔄 Попытка альтернативной инициализации WebPhone...');
-            webPhone = new WebPhone({
-                sipInfo: sipInfo,
-                logLevel: 1
-            });
+            try {
+                webPhone = new WebPhone({
+                    sipInfo: sipInfo,
+                    logLevel: 1,
+                    appName: 'RingCentral WebPhone Bridge',
+                    appVersion: '1.0.0',
+                    userAgent: 'RingCentral-WebPhone-Bridge/1.0.0'
+                });
+            } catch (secondError) {
+                logger.error(`❌ Ошибка альтернативной инициализации: ${secondError.message}`);
+                
+                // Попробуем самый минимальный вариант
+                logger.info('🔄 Попытка минимальной инициализации WebPhone...');
+                webPhone = new WebPhone({
+                    sipInfo: sipInfo,
+                    userAgent: 'RingCentral-WebPhone-Bridge/1.0.0'
+                });
+            }
         }
         
         // Проверяем структуру WebPhone объекта
@@ -364,19 +385,37 @@ function setupWebPhoneEventHandlers() {
         }
     });
     
-    // Обработка таймаута sipClient
-    if (webPhone.sipClient) {
-        webPhone.sipClient.on('timeout', () => {
-            logger.warn('⏰ Таймаут sipClient соединения');
-            isWebPhoneRegistered = false;
-        });
-    }
-    
     // Событие отключения
     webPhone.on('unregistered', () => {
         isWebPhoneRegistered = false;
         logger.warn('⚠️ WebPhone отключен от SIP сервера');
     });
+    
+    // Дополнительные события для sipClient
+    if (webPhone.sipClient) {
+        webPhone.sipClient.on('timeout', () => {
+            logger.warn('⏰ Таймаут sipClient соединения');
+            isWebPhoneRegistered = false;
+        });
+        
+        webPhone.sipClient.on('connected', () => {
+            logger.info('🔗 SipClient подключен к серверу');
+        });
+        
+        webPhone.sipClient.on('disconnected', () => {
+            logger.warn('❌ SipClient отключен от сервера');
+            isWebPhoneRegistered = false;
+        });
+        
+        // Обработка всех событий для диагностики
+        const originalEmit = webPhone.sipClient.emit;
+        webPhone.sipClient.emit = function(...args) {
+            if (args[0] !== 'message') { // Исключаем частые сообщения
+                logger.info(`🔍 SipClient Event: ${args[0]}`, args.slice(1));
+            }
+            return originalEmit.apply(this, args);
+        };
+    }
     
     // Изменение состояния
     webPhone.on('stateChanged', (state) => {
