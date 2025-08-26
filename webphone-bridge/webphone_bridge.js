@@ -353,6 +353,19 @@ class MockRTCPeerConnection {
                 replaceTrack: (newTrack) => {
                     console.log('🔧 MockRTCPeerConnection: replaceTrack вызван');
                     return Promise.resolve();
+                },
+                getParameters: () => {
+                    console.log('🔧 MockRTCPeerConnection: getParameters вызван');
+                    return {
+                        encodings: [],
+                        headerExtensions: [],
+                        rtcp: {},
+                        codecs: []
+                    };
+                },
+                setParameters: (parameters) => {
+                    console.log('🔧 MockRTCPeerConnection: setParameters вызван');
+                    return Promise.resolve();
                 }
             }
         };
