@@ -341,6 +341,27 @@ class MockRTCPeerConnection {
         }
     }
 
+    addTrack(track, stream) {
+        console.log('🔧 MockRTCPeerConnection: addTrack вызван', track.kind, track.id);
+        if (stream && !this._localStreams.includes(stream)) {
+            this._localStreams.push(stream);
+        }
+        return {
+            track: track,
+            sender: {
+                track: track,
+                replaceTrack: (newTrack) => {
+                    console.log('🔧 MockRTCPeerConnection: replaceTrack вызван');
+                    return Promise.resolve();
+                }
+            }
+        };
+    }
+
+    removeTrack(sender) {
+        console.log('🔧 MockRTCPeerConnection: removeTrack вызван');
+    }
+
     getLocalStreams() {
         return this._localStreams;
     }

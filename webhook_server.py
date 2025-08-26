@@ -695,6 +695,12 @@ def _run_answer_call(call_data: Dict[str, Any]):
     try:
         logger.info(f"📞 Запуск автоматического ответа на звонок: callId={call_data.get('callId')}")
         
+        # Проверяем статус звонка из данных
+        call_status = call_data.get('status', {}).get('code')
+        if call_status in ['Disconnected', 'Gone', 'Cancelled']:
+            logger.warning(f"⚠️ Пропускаем ответ на звонок в статусе: {call_status}")
+            return
+        
         # Извлекаем необходимые данные
         session_id = call_data.get('telephonySessionId') or call_data.get('sessionId')
         party_id = call_data.get('partyId')
@@ -1323,8 +1329,19 @@ def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[
                 return False
             
             party_status = target_party.get('status', {}).get('code')
-            if party_status != 'Setup':
-                logger.warning(f"⚠️ Неподходящий статус для ответа: {party_status} (ожидается Setup)")
+            party_reason = target_party.get('status', {}).get('reason')
+            
+            # Проверяем допустимые статусы для ответа на звонок
+            valid_statuses = ['Setup', 'Proceeding', 'Alerting']
+            invalid_statuses = ['Disconnected', 'Gone', 'Cancelled', 'Answered', 'Connected']
+            
+            if party_status in invalid_statuses:
+                logger.warning(f"⚠️ Нельзя ответить на звонок в статусе: {party_status}")
+                if party_reason:
+                    logger.warning(f"⚠️ Причина: {party_reason}")
+                return False
+            elif party_status not in valid_statuses:
+                logger.warning(f"⚠️ Неизвестный статус для ответа: {party_status}")
                 return False
                 
             logger.info(f"✅ Статус звонка подходит для ответа: {party_status}")
