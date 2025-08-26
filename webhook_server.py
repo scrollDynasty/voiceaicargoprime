@@ -11,6 +11,7 @@ import hashlib
 import base64
 import os
 import time
+import requests
 from datetime import datetime
 from typing import Dict, Any, Optional
 from flask import Flask, request, jsonify, Response, make_response
@@ -71,6 +72,97 @@ def log_response_info(response):
 active_calls = {}
 call_lock = threading.Lock()
 subscription_id = None
+
+def get_current_device_id():
+    """Получить актуальный Device ID из WebPhone Bridge"""
+    try:
+        # Пытаемся получить Device ID из WebPhone Bridge
+        import requests
+        webphone_response = requests.get('http://localhost:8081/status', timeout=2)
+        if webphone_response.status_code == 200:
+            webphone_status = webphone_response.json()
+            device_id = webphone_status.get('deviceId')
+            if device_id:
+                logger.info(f"📱 Получен Device ID из WebPhone Bridge: {device_id}")
+                return device_id
+    except Exception as e:
+        logger.warning(f"⚠️ Ошибка получения Device ID из WebPhone Bridge: {e}")
+    
+    # Fallback: пытаемся получить из логов WebPhone Bridge
+    try:
+        import subprocess
+        result = subprocess.run(['grep', '-o', 'Device ID: [0-9]*', 'webphone-bridge/webphone-bridge.log'], 
+                              capture_output=True, text=True, timeout=5)
+        if result.returncode == 0 and result.stdout:
+            # Берем последний Device ID из логов
+            lines = result.stdout.strip().split('\n')
+            if lines:
+                last_line = lines[-1]
+                device_id = last_line.split(': ')[-1]
+                logger.info(f"📱 Получен Device ID из логов: {device_id}")
+                return device_id
+    except Exception as e:
+        logger.warning(f"⚠️ Ошибка получения Device ID из логов: {e}")
+    
+    # Последний fallback - пытаемся получить из переменной окружения или использовать None
+    fallback_device_id = os.getenv('RINGCENTRAL_DEVICE_ID')
+    if fallback_device_id:
+        logger.warning(f"⚠️ Используем Device ID из переменной окружения: {fallback_device_id}")
+        return fallback_device_id
+    else:
+        logger.error("❌ Не удалось получить Device ID ни из одного источника")
+        return None
+
+def get_device_id_from_webhook_event(webhook_data):
+    """Получить Device ID из webhook события"""
+    try:
+        # Пытаемся получить Device ID из поля to.deviceId в webhook событии
+        body = webhook_data.get('body', {})
+        parties = body.get('parties', [])
+        
+        for party in parties:
+            if party.get('direction') == 'Inbound':
+                to_info = party.get('to', {})
+                device_id = to_info.get('deviceId')
+                if device_id:
+                    logger.info(f"📱 Получен Device ID из webhook события: {device_id}")
+                    return device_id
+    except Exception as e:
+        logger.warning(f"⚠️ Ошибка получения Device ID из webhook события: {e}")
+    
+    return None
+
+def send_webhook_to_js_server(event_data: Dict[str, Any]) -> None:
+    """
+    Отправляет webhook событие в JavaScript сервер для обработки
+    
+    Args:
+        event_data: Данные события для отправки
+    """
+    try:
+        js_server_url = "http://localhost:8081/webhook"
+        
+        logger.info(f"📤 Отправка webhook события в JS сервер: {js_server_url}")
+        logger.info(f"📋 Данные события: {json.dumps(event_data, indent=2)}")
+        
+        response = requests.post(
+            js_server_url,
+            json=event_data,
+            headers={'Content-Type': 'application/json'},
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            logger.info("✅ Webhook событие успешно отправлено в JS сервер")
+        else:
+            logger.warning(f"⚠️ JS сервер вернул статус {response.status_code}: {response.text}")
+            
+    except requests.exceptions.ConnectionError:
+        logger.warning("⚠️ JS сервер недоступен (ConnectionError)")
+    except requests.exceptions.Timeout:
+        logger.warning("⚠️ Таймаут при отправке в JS сервер")
+    except Exception as e:
+        logger.error(f"❌ Ошибка отправки webhook в JS сервер: {e}")
 
 def disable_auto_json_parsing(f):
     """
@@ -271,15 +363,18 @@ def ringcentral_webhook():
         # Извлекаем body из webhook payload
         body = webhook_data.get('body', {})
         
+        # Отправляем все webhook события в JavaScript сервер для обработки
+        send_webhook_to_js_server(webhook_data)
+        
         # Явная обработка события telephony-session-event
         if event_type == 'telephony-session-event':
             logger.info("📞 Обнаружено событие telephony-session-event")
-            return _handle_telephony_session(body)
+            return _handle_telephony_session(body, webhook_data)
         
         # Проверяем наличие telephonySessionId для telephony событий (fallback)
         if body.get('telephonySessionId'):
             logger.info(f"📞 Обрабатываем telephony событие")
-            return _handle_telephony_session(body)
+            return _handle_telephony_session(body, webhook_data)
         else:
             logger.info(f"📋 Не telephony событие: {webhook_data.get('uuid', 'unknown')}")
             return jsonify({"status": "received"}), 200
@@ -342,12 +437,13 @@ def _verify_webhook_signature(request) -> bool:
         logger.error(f"Ошибка проверки подписи: {e}")
         return False
 
-def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
+def _handle_telephony_session(session_data: Dict[str, Any], webhook_data: Dict[str, Any] = None) -> Response:
     """
     Обработка telephony/sessions событий
     
     Args:
         session_data: Данные телефонной сессии из body
+        webhook_data: Полные данные webhook события
         
     Returns:
         Response: Flask ответ
@@ -400,6 +496,14 @@ def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
                 thread.daemon = True
                 thread.start()
                 logger.info(f"📋 Запущен VoiceAIEngine для звонка {call_data['callId']}")
+                
+                # КРИТИЧНО: Запускаем автоматический ответ на звонок через Call Control API
+                # Добавляем webhook данные в call_data
+                call_data['webhook_data'] = webhook_data
+                answer_thread = threading.Thread(target=_run_answer_call, args=(call_data,))
+                answer_thread.daemon = True
+                answer_thread.start()
+                logger.info(f"📞 Запущен автоматический ответ на звонок {call_data['callId']}")
                 
             elif direction == 'Inbound' and status.get('code') in ['Proceeding', 'Setup', 'Alerting']:
                 # Логируем входящие звонки в других состояниях без обработки
@@ -457,12 +561,34 @@ async def _answer_and_process_call(call_data: Dict[str, Any]):
         logger.info(f"📞 Начинаем ответ на звонок {call_id}")
         logger.info(f"🔗 Session: {telephony_session_id}, Party: {party_id}")
         
-        # Отвечаем на звонок через RingCentral API
+        # Отвечаем на звонок через RingCentral API с правильным Device ID
         try:
             logger.info(f"🔄 Отправляем запрос на ответ для звонка {call_id}")
+            
+            # Получаем Device ID из webhook события (самый надежный способ)
+            device_id = get_device_id_from_webhook_event(call_data.get('webhook_data', {}))
+            if not device_id:
+                # Fallback: получаем из WebPhone Bridge
+                device_id = get_current_device_id()
+            
+            if not device_id:
+                logger.error(f"❌ Не удалось получить Device ID для звонка {call_id}")
+                return
+            
+            logger.info(f"📱 Используем Device ID: {device_id}")
+            
+            # Формируем тело запроса согласно Call Control API
+            answer_body = {
+                "deviceId": device_id
+            }
+            
+            logger.info(f"📱 Используем Device ID: {device_id}")
+            logger.info(f"📋 Тело запроса: {answer_body}")
+            
             answer_response = make_request(
                 'POST',
-                f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{telephony_session_id}/parties/{party_id}/answer'
+                f'/restapi/v1.0/account/~/telephony/sessions/{telephony_session_id}/parties/{party_id}/answer',
+                data=answer_body
             )
             logger.info(f"✅ Успешно ответили на звонок {call_id}")
             logger.info(f"📋 Ответ API: {answer_response}")
