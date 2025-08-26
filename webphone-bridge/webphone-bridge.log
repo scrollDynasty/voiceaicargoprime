@@ -4558,3 +4558,8 @@
 2025-08-26T22:33:19.691Z [INFO] 🔍 SipClient Event: inboundMessage
 2025-08-26T22:33:19.691Z [INFO] ✅ sipClient перерегистрирован с новыми данными
 2025-08-26T22:33:46.607Z [WARN] ⚠️ Python AI сервер недоступен: 
+2025-08-26T22:34:00.917Z [INFO] 🛑 Получен сигнал завершения...
+2025-08-26T22:34:00.918Z [INFO] 🛑 Завершение работы WebPhone Bridge...
+2025-08-26T22:34:00.918Z [INFO] 🔍 SipClient Event: outboundMessage
+2025-08-26T22:34:00.947Z [INFO] 🔍 SipClient Event: inboundMessage
+2025-08-26T22:34:00.979Z [INFO] 🔍 SipClient Event: inboundMessage
