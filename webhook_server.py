@@ -476,6 +476,12 @@ def _handle_telephony_session(session_data: Dict[str, Any], webhook_data: Dict[s
                 to_data = party.get('to', {})
                 device_id = to_data.get('deviceId')
                 
+                # Проверяем, что deviceId получен
+                if not device_id:
+                    logger.error(f"❌ Device ID не найден в webhook событии для звонка: session={telephony_session_id}, party={party_id}")
+                    logger.error(f"📋 Данные получателя: {to_data}")
+                    return jsonify({"status": "error", "message": "Device ID not found"}), 400
+                
                 # Подготавливаем данные звонка
                 call_data = {
                     "callId": f"{telephony_session_id}_{party_id}",
@@ -645,8 +651,17 @@ def _run_answer_call(call_data: Dict[str, Any]):
         party_id = call_data.get('partyId')
         device_id = call_data.get('deviceId')
         
+        logger.info(f"📋 Данные для ответа на звонок:")
+        logger.info(f"   Session ID: {session_id}")
+        logger.info(f"   Party ID: {party_id}")
+        logger.info(f"   Device ID: {device_id}")
+        
         if not session_id or not party_id:
             logger.error(f"❌ Недостаточно данных для ответа на звонок: session_id={session_id}, party_id={party_id}")
+            return
+            
+        if not device_id:
+            logger.error(f"❌ Device ID не найден для ответа на звонок: device_id={device_id}")
             return
         
         # Извлекаем информацию о звонящем
@@ -1111,8 +1126,8 @@ def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[
                 return False
             
             party_status = target_party.get('status', {}).get('code')
-            if party_status not in ['Ringing', 'Proceeding']:
-                logger.warning(f"⚠️ Неподходящий статус для ответа: {party_status} (ожидается Ringing)")
+            if party_status != 'Ringing':
+                logger.warning(f"⚠️ Неподходящий статус для ответа: {party_status} (ожидается только Ringing)")
                 return False
                 
             logger.info(f"✅ Статус звонка подходит для ответа: {party_status}")
@@ -1124,9 +1139,10 @@ def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[
         request_body = {}
         if device_id:
             request_body["deviceId"] = device_id
-            logger.info(f"📱 Используем deviceId: {device_id}")
+            logger.info(f"📱 Используем deviceId из webhook события: {device_id}")
         else:
-            logger.warning("⚠️ deviceId не предоставлен, пробуем без него")
+            logger.error("❌ deviceId не предоставлен, невозможно принять звонок")
+            return False
         
         # ✅ Правильный endpoint для ответа на звонок
         # Документация: https://developers.ringcentral.com/api-reference/Call-Control/answerCall

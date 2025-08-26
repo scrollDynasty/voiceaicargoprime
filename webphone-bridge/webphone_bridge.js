@@ -1404,11 +1404,11 @@ async function forceAnswerCall(sessionId) {
         logger.info('📋 Информация о сессии:', JSON.stringify(sessionInfo, null, 2));
         
         // Находим party ID для входящего звонка
-        // Принимаем звонки в состояниях "Setup", "Proceeding" или "Ringing"
+        // Принимаем звонки ТОЛЬКО в состоянии "Ringing"
         const inboundParty = sessionInfo.parties.find(party => 
             party.direction === 'Inbound' && 
             party.status && 
-            ['Setup', 'Proceeding', 'Ringing'].includes(party.status.code) &&
+            party.status.code === 'Ringing' &&
             !party.missedCall
         );
         
@@ -1416,8 +1416,15 @@ async function forceAnswerCall(sessionId) {
             const partyId = inboundParty.id;
             logger.info(`📞 Найден входящий звонок, Party ID: ${partyId}`);
             
-            // Используем deviceId из глобальной переменной для приема звонка
-            const deviceId = global.registeredDeviceId || config.deviceId;
+            // Получаем deviceId из данных получателя в webhook событии
+            const toData = inboundParty.to || {};
+            const deviceId = toData.deviceId || global.registeredDeviceId || config.deviceId;
+            
+            if (!deviceId) {
+                logger.error('❌ Device ID не найден для приема звонка');
+                return;
+            }
+            
             const answerBody = {
                 deviceId: deviceId
             };
