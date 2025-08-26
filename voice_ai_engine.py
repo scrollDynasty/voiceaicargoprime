@@ -17,6 +17,7 @@ from enum import Enum
 from speech_processor import speech_processor, async_transcribe, async_synthesize
 from llm_handler import llm_handler, generate_ai_response
 from config import Config
+from ringcentral_auth import make_request
 
 logger = logging.getLogger(__name__)
 
@@ -90,10 +91,16 @@ class VoiceAIEngine:
         Returns:
             Response data for RingCentral
         """
-        call_id = call_data.get("callId", str(uuid.uuid4()))
+        session_id = call_data.get("sessionId") or call_data.get("telephonySessionId")
+        party_id = call_data.get("partyId")
+        call_id = call_data.get("callId") or (f"{session_id}_{party_id}" if session_id and party_id else str(uuid.uuid4()))
         phone_number = call_data.get("from", {}).get("phoneNumber", "Unknown")
         
         logger.info(f"Handling incoming call {call_id} from {phone_number}")
+        logger.debug(f"Call identifiers: session_id={session_id}, party_id={party_id}")
+        if not session_id or not party_id:
+            logger.error("Missing sessionId or partyId in call data")
+            return self._create_error_response(call_id, "Missing sessionId or partyId")
         
         # Check if we can handle more calls
         if len(self.active_calls) >= Config.PERFORMANCE["max_concurrent_calls"]:
@@ -118,48 +125,35 @@ class VoiceAIEngine:
         
         try:
             # Answer the call
-            response = await self._answer_call(call_id)
+            api_response = await self._answer_call(session_id, party_id)
+            session.state = CallState.ANSWERED
+            session.last_activity = datetime.now()
             
             # Start conversation loop
             asyncio.create_task(self._conversation_loop(call_id))
             
-            return response
+            return api_response
             
         except Exception as e:
             logger.error(f"Failed to handle call {call_id}: {e}")
             await self._end_call(call_id, "Error occurred")
             return self._create_error_response(call_id, str(e))
     
-    async def _answer_call(self, call_id: str) -> Dict[str, Any]:
-        """Answer incoming call"""
-        session = self.active_calls.get(call_id)
-        if not session:
-            raise ValueError(f"Call session {call_id} not found")
-        
-        session.state = CallState.ANSWERED
-        session.last_activity = datetime.now()
-        
-        # Generate welcome message
-        welcome_text = "Welcome to Prime Cargo Logistics. I'm your AI assistant. How can I help you with your delivery today?"
-        
-        # Synthesize welcome message
-        welcome_audio = await async_synthesize(welcome_text)
-        
-        # Update session
-        session.conversation_history.append({
-            "role": "assistant",
-            "content": welcome_text,
-            "timestamp": datetime.now().isoformat()
-        })
-        
-        logger.info(f"Answered call {call_id}")
-        
-        return {
-            "callId": call_id,
-            "action": "answer",
-            "audio": welcome_audio,
-            "text": welcome_text
-        }
+    async def _answer_call(self, session_id: str, party_id: str) -> Dict[str, Any]:
+        """Answer incoming call via RingCentral Call Control API"""
+        if not session_id or not party_id:
+            raise ValueError("session_id and party_id are required to answer a call")
+        try:
+            response = make_request(
+                'POST',
+                f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{session_id}/parties/{party_id}/answer'
+            )
+            logger.info(f"Call answered via RingCentral: session={session_id}, party={party_id}")
+            logger.debug(f"Answer response: {json.dumps(response) if isinstance(response, dict) else response}")
+            return response or {"status": "answered"}
+        except Exception as e:
+            logger.error(f"Failed to answer call via RingCentral: session={session_id}, party={party_id}, error={e}")
+            raise
     
     async def _conversation_loop(self, call_id: str):
         """Main conversation loop for a call"""
