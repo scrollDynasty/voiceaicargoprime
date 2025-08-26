@@ -19,11 +19,34 @@ from flask_cors import CORS
 import threading
 from functools import wraps
 
-from voice_ai_engine import voice_ai_engine
-from speech_processor import async_synthesize
+# Временно отключаем AI модули для тестирования WebPhone
+# from voice_ai_engine import voice_ai_engine
+# from speech_processor import async_synthesize
 from config import Config
 from ringcentral_auth import make_request
-from audio_stream_handler import audio_stream_handler  # Новый импорт
+# from audio_stream_handler import audio_stream_handler  # Новый импорт
+
+# Заглушки для AI модулей
+class MockVoiceAIEngine:
+    def __init__(self):
+        pass
+    def handle_call(self, *args, **kwargs):
+        logger.info("🧪 MOCK: VoiceAI engine заглушка")
+        return None
+    def health_check(self):
+        return {"status": "healthy", "message": "Mock AI engine is running"}
+
+voice_ai_engine = MockVoiceAIEngine()
+
+def async_synthesize(*args, **kwargs):
+    logger.info("🧪 MOCK: Speech synthesis заглушка")
+    return None
+
+class MockAudioStreamHandler:
+    def __init__(self):
+        pass
+
+audio_stream_handler = MockAudioStreamHandler()
 
 # Настройка логирования
 logging.basicConfig(
