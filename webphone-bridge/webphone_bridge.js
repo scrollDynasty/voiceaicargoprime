@@ -1161,7 +1161,7 @@ async function handleWebhookEvent(eventData) {
                     const inboundCall = body.parties.find(party => 
                         party.direction === 'Inbound' && 
                         party.status && 
-                        party.status.code === 'Ringing' &&  // ✅ Только Ringing статус
+                        party.status.code === 'Setup' &&  // ✅ Принимаем в статусе Setup
                         !party.missedCall
                     );
                     
@@ -1170,7 +1170,7 @@ async function handleWebhookEvent(eventData) {
                         logger.info(`📞 Звонок от: ${inboundCall.from?.phoneNumber || 'Неизвестно'}`);
                         logger.info(`📞 Статус: ${inboundCall.status.code}`);
                         
-                        // ✅ Автоматически принимаем звонок только в статусе Ringing
+                        // ✅ Автоматически принимаем звонок в статусе Setup
                         logger.info('🤖 Автоматически принимаем звонок через API...');
                         
                         // Принудительно принимаем звонок
@@ -1185,17 +1185,17 @@ async function handleWebhookEvent(eventData) {
                         const otherInboundCall = body.parties.find(party => 
                             party.direction === 'Inbound' && 
                             party.status && 
-                            ['Setup', 'Proceeding'].includes(party.status.code) &&
+                            ['Proceeding'].includes(party.status.code) &&
                             !party.missedCall
                         );
                         
                         if (otherInboundCall) {
-                            logger.info(`📞 Ожидаем статус Ringing, текущий: ${otherInboundCall.status.code}`);
+                            logger.info(`📞 Звонок в статусе Proceeding, но принимаем только Setup: ${otherInboundCall.status.code}`);
                         }
                     }
                 }
             }
-        } else {
+        } else {                                                                                                                                                                                                                                                                                                                                        
             logger.info('📋 Не telephony событие, пропускаем');
         }
         
@@ -1437,23 +1437,60 @@ async function forceAnswerCall(sessionId) {
     try {
         logger.info(`🔄 Принудительный прием звонка через Call Control API: ${sessionId}`);
         
+        // Проверяем авторизацию
+        if (!platform || !platform.accessToken()) {
+            logger.error(`❌ Платформа не авторизована`);
+            return false;
+        }
+        
+        logger.info(`🔐 Платформа авторизована, токен: ${platform.accessToken().substring(0, 20)}...`);
+        
         // Получаем информацию о сессии
-        const sessionResponse = await platform.get(`/restapi/v1.0/account/~/extension/~/telephony/sessions/${sessionId}`);
-        const sessionInfo = await sessionResponse.json();
+        logger.info(`📤 Запрашиваем информацию о сессии: GET /restapi/v1.0/account/~/extension/~/telephony/sessions/${sessionId}`);
+        
+        try {
+            const sessionResponse = await platform.get(`/restapi/v1.0/account/~/extension/~/telephony/sessions/${sessionId}`);
+            const sessionInfo = await sessionResponse.json();
+            logger.info(`✅ Информация о сессии получена успешно`);
+        } catch (sessionError) {
+            logger.error(`❌ Ошибка получения информации о сессии: ${sessionError.message}`);
+            logger.error(`❌ HTTP Status: ${sessionError.response?.status}`);
+            logger.error(`❌ Response: ${sessionError.response?.data}`);
+            
+            // Попробуем альтернативный endpoint без extension
+            try {
+                logger.info(`🔄 Пробуем альтернативный endpoint без extension...`);
+                const altSessionResponse = await platform.get(`/restapi/v1.0/account/~/telephony/sessions/${sessionId}`);
+                const altSessionInfo = await altSessionResponse.json();
+                logger.info(`✅ Информация о сессии получена через альтернативный endpoint`);
+                sessionInfo = altSessionInfo;
+            } catch (altError) {
+                logger.error(`❌ Альтернативный endpoint тоже не работает: ${altError.message}`);
+                return false;
+            }
+        }
         
         logger.info('📋 Информация о сессии:', JSON.stringify(sessionInfo, null, 2));
         
-        // Находим party ID для входящего звонка - только в статусе Ringing
+        // Логируем все parties в сессии
+        const parties = sessionInfo.parties || [];
+        logger.info(`📋 Всего parties в сессии: ${parties.length}`);
+        parties.forEach((party, index) => {
+            logger.info(`  Party ${index}: id=${party.id}, direction=${party.direction}, status=${party.status?.code}, missedCall=${party.missedCall}`);
+        });
+        
+        // Находим party ID для входящего звонка - в статусе Setup
         const inboundParty = sessionInfo.parties.find(party => 
             party.direction === 'Inbound' && 
             party.status && 
-            party.status.code === 'Ringing' &&  // ✅ Только Ringing статус
+            party.status.code === 'Setup' &&  // ✅ Принимаем в статусе Setup
             !party.missedCall
         );
         
         if (inboundParty) {
             const partyId = inboundParty.id;
             logger.info(`📞 Найден входящий звонок, Party ID: ${partyId}`);
+            logger.info(`📋 Полная информация о party:`, JSON.stringify(inboundParty, null, 2));
             
             // Получаем deviceId из данных получателя в webhook событии
             const toData = inboundParty.to || {};
@@ -1471,10 +1508,11 @@ async function forceAnswerCall(sessionId) {
             logger.info(`📱 Принимаем звонок на устройство: ${deviceId}`);
             
             // ✅ ПРАВИЛЬНЫЙ endpoint с extension
-            const answerResponse = await platform.post(
-                `/restapi/v1.0/account/~/extension/~/telephony/sessions/${sessionId}/parties/${partyId}/answer`,
-                answerBody
-            );
+            const answerEndpoint = `/restapi/v1.0/account/~/extension/~/telephony/sessions/${sessionId}/parties/${partyId}/answer`;
+            logger.info(`📤 Отправляем запрос на ответ: POST ${answerEndpoint}`);
+            logger.info(`📋 Тело запроса:`, JSON.stringify(answerBody, null, 2));
+            
+            const answerResponse = await platform.post(answerEndpoint, answerBody);
             const answerResult = await answerResponse.json();
             
             logger.info('✅ Звонок принудительно принят через Call Control API');
@@ -1482,7 +1520,7 @@ async function forceAnswerCall(sessionId) {
             
             return true;
         } else {
-            logger.warn('⚠️ Входящий звонок в статусе Ringing не найден');
+            logger.warn('⚠️ Входящий звонок в статусе Setup не найден');
             return false;
         }
         

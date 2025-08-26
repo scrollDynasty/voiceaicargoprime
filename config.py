@@ -17,7 +17,7 @@ class Config:
         "client_id": os.getenv("RINGCENTRAL_CLIENT_ID", "bXCZ510zNmybxAUXGIZruT"),
         "client_secret": os.getenv("RINGCENTRAL_CLIENT_SECRET", "10hW9ccNfhyc1y69bQzdgnVUnFyf76B6qcmwOtypEGo7"),
         "server": os.getenv("RINGCENTRAL_SERVER", "https://platform.ringcentral.com"),
-        "main_number": os.getenv("RINGCENTRAL_MAIN_NUMBER", "5135725833"),       
+        "main_number": os.getenv("RINGCENTRAL_MAIN_NUMBER", "+15139283626"),       
         "webhook_url": os.getenv("WEBHOOK_URL", "https://9632ab98a232.ngrok-free.app/webhook"), 
         "webhook_secret": os.getenv("WEBHOOK_SECRET", "1Z7ztKD0I1gBu1QscmOBkonCn1tXG7LN"),
         "jwt_token": os.getenv("RINGCENTRAL_JWT_TOKEN", "eyJraWQiOiI4NzYyZjU5OGQwNTk0NGRiODZiZjVjYTk3ODA0NzYwOCIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJhdWQiOiJodHRwczovL3BsYXRmb3JtLnJpbmdjZW50cmFsLmNvbS9yZXN0YXBpL29hdXRoL3Rva2VuIiwic3ViIjoiMjA2OTkwOTAxOSIsImlzcyI6Imh0dHBzOi8vcGxhdGZvcm0ucmluZ2NlbnRyYWwuY29tIiwiZXhwIjozOTAzNjUxMzQyLCJpYXQiOjE3NTYxNjc2OTUsImp0aSI6IlpTckJuOHlFVDJLeEFjOXhmTlZ6ZncifQ.fHF6mXLa9wHygLYiFVQzIo4bKT8niwnYKD7PT7gFGoayZpDOkHwamesmXunn_IIY3rRT9Z2hXHgaJpdpW5ZRimaYOydcjGpj1HgdOxmTRBcYj6B4HWXb9YXO95Q2sfFLPS-3DwvcxeqNW8yoX3Cx31VpCfsybrvwq1NtDO73KulJYPByTSjoLQMj5to5gxRtKlqbhabj1o4YaeKkKb70_Sr-T0lXQS_93fOaPi0xP_AYNhDmDEQBZc1tvwUF7-ETj2Bv-EnfH5OxWfbRS3bSnZdRs1P-0TJg6SfNgwlAGNnMqEdpVyBMXt-02aQA8xgo1O9RDI-nSUXd2iKaA5CTAg"),

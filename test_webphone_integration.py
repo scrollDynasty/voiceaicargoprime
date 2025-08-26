@@ -85,7 +85,7 @@ class WebPhoneIntegrationTest:
         test_call_data = {
             "callId": "test-call-" + str(int(time.time())),
             "sessionId": "test-session-123",
-            "from": "+15135725833",
+            "from": "+15139283626",
             "to": "+12345678901",
             "timestamp": datetime.now().isoformat(),
             "source": "webphone"

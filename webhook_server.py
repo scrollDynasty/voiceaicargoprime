@@ -467,9 +467,18 @@ def _handle_telephony_session(session_data: Dict[str, Any], webhook_data: Dict[s
             logger.info(f"Обрабатываем party: direction={direction}, status={status}, party_id={party_id}")
             
             # ✅ Улучшенная логика обработки входящих звонков
-            # Обрабатываем звонки ТОЛЬКО в состоянии "Ringing" для автоматического ответа
-            # "Proceeding" - слишком рано, "Setup" - еще не готово
-            if direction == 'Inbound' and status.get('code') == 'Ringing':
+            # Обрабатываем звонки в состоянии "Setup" или "Proceeding" для автоматического ответа
+            # Принимаем как можно раньше, чтобы не пропустить звонок
+            # ✅ Проверяем, что звонок приходит на нужный номер
+            target_number = "+15139283626"  # Номер для мониторинга
+            to_data = party.get('to', {})
+            incoming_number = to_data.get('phoneNumber', '')
+            
+            # Логируем все входящие звонки для отладки
+            if direction == 'Inbound':
+                logger.info(f"📞 Входящий звонок на номер: {incoming_number}, статус: {status.get('code')}")
+            
+            if direction == 'Inbound' and status.get('code') == 'Setup' and target_number in incoming_number:
                 logger.info(f"🔔 Обнаружен входящий звонок в состоянии {status.get('code')}: session={telephony_session_id}, party={party_id}")
                 
                 # Извлекаем deviceId из данных получателя
@@ -502,6 +511,8 @@ def _handle_telephony_session(session_data: Dict[str, Any], webhook_data: Dict[s
                 logger.info(f"   Device ID: {device_id}")
                 logger.info(f"   От: {party.get('from', {}).get('phoneNumber', 'Unknown')}")
                 logger.info(f"   К: {to_data.get('phoneNumber', 'Unknown')}")
+                logger.info(f"   Статус: {status.get('code')}")
+                logger.info(f"   Направление: {direction}")
                 
                 # Сохраняем информацию о звонке
                 with call_lock:
@@ -533,6 +544,42 @@ def _handle_telephony_session(session_data: Dict[str, Any], webhook_data: Dict[s
                 # Логируем завершенные звонки
                 logger.info(f"📞 Входящий звонок завершен в состоянии {status.get('code')}: session={telephony_session_id}, party={party_id}")
                 
+                # Проверяем, была ли это голосовая почта на нужный номер
+                target_number = "15139283626"  # Номер для мониторинга
+                to_data = party.get('to', {})
+                incoming_number = to_data.get('phoneNumber', '')
+                
+                if status.get('reason') == 'Voicemail' and party.get('missedCall') and target_number in incoming_number:
+                    logger.info(f"📞 Обнаружена голосовая почта, запускаем автоматическое поднятие трубки...")
+                    
+                    # Извлекаем deviceId из данных получателя
+                    to_data = party.get('to', {})
+                    device_id = to_data.get('deviceId')
+                    
+                    if device_id:
+                        # Запускаем автоматическое поднятие трубки после голосовой почты
+                        voicemail_data = {
+                            "callId": f"{telephony_session_id}_{party_id}_voicemail",
+                            "telephonySessionId": telephony_session_id,
+                            "partyId": party_id,
+                            "from": party.get('from', {}),
+                            "to": to_data,
+                            "direction": direction,
+                            "status": status,
+                            "deviceId": device_id,
+                            "timestamp": datetime.now().isoformat(),
+                            "source": "voicemail",
+                            "webhook_data": webhook_data
+                        }
+                        
+                        # Запускаем обработку голосовой почты в фоновом потоке
+                        voicemail_thread = threading.Thread(target=_handle_voicemail_and_answer, args=(voicemail_data,))
+                        voicemail_thread.daemon = True
+                        voicemail_thread.start()
+                        logger.info(f"📞 Запущена обработка голосовой почты для {voicemail_data['callId']}")
+                    else:
+                        logger.error(f"❌ Device ID не найден для обработки голосовой почты")
+                
                 # Удаляем из активных звонков
                 call_id = f"{telephony_session_id}_{party_id}"
                 with call_lock:
@@ -546,7 +593,9 @@ def _handle_telephony_session(session_data: Dict[str, Any], webhook_data: Dict[s
                     logger.info(f"🗑️ Звонок {call_id} удален из отвеченных")
             else:
                 if direction == 'Inbound':
-                    logger.info(f"⏭️ Пропускаем входящий звонок со статусом {status.get('code')} (не подходит для ответа)")
+                    to_data = party.get('to', {})
+                    incoming_number = to_data.get('phoneNumber', 'Unknown')
+                    logger.info(f"⏭️ Пропускаем входящий звонок на номер {incoming_number} со статусом {status.get('code')} (не подходит для ответа)")
                 
                 # Обрабатываем изменения статуса для существующих звонков
                 if party_id:
@@ -683,6 +732,103 @@ def _run_answer_call(call_data: Dict[str, Any]):
         logger.error(f"❌ Ошибка при автоматическом ответе на звонок: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
+
+def _handle_voicemail_and_answer(voicemail_data: Dict[str, Any]):
+    """Обработать голосовую почту и автоматически поднять трубку."""
+    try:
+        logger.info(f"📞 Обработка голосовой почты: callId={voicemail_data.get('callId')}")
+        
+        # Ждем немного, чтобы голосовая почта завершилась
+        import time
+        logger.info(f"⏳ Ожидание завершения голосовой почты (3 секунды)...")
+        time.sleep(3)
+        
+        # Получаем номер звонящего для обратного звонка
+        caller_number = voicemail_data.get('from', {}).get('phoneNumber')
+        device_id = voicemail_data.get('deviceId')
+        
+        if not caller_number or not device_id:
+            logger.error(f"❌ Недостаточно данных для обратного звонка: caller={caller_number}, device={device_id}")
+            return
+        
+        logger.info(f"📞 Инициируем обратный звонок на номер звонящего {caller_number}...")
+        
+        # Инициируем обратный звонок через RingCentral API
+        success = initiate_outbound_call(caller_number, device_id)
+        
+        if success:
+            logger.info(f"✅ Обратный звонок успешно инициирован на {caller_number}")
+        else:
+            logger.error(f"❌ Не удалось инициировать обратный звонок на {caller_number}")
+            
+    except Exception as e:
+        logger.error(f"❌ Ошибка при обработке голосовой почты: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+def initiate_outbound_call(phone_number: str, device_id: str) -> bool:
+    """Инициировать исходящий звонок через RingCentral API."""
+    try:
+        logger.info(f"📞 Инициация исходящего звонка на {phone_number} с device {device_id}")
+        
+        # Подготавливаем данные для звонка
+        call_data = {
+            "from": {
+                "deviceId": device_id
+            },
+            "to": [
+                {
+                    "phoneNumber": phone_number
+                }
+            ]
+        }
+        
+        logger.info(f"📋 Данные для исходящего звонка: {call_data}")
+        
+        # ✅ Правильный endpoint для исходящих звонков
+        # RingCentral Call Control API для создания сессии
+        response = make_request(
+            'POST',
+            '/restapi/v1.0/account/~/extension/~/telephony/sessions',
+            call_data
+        )
+        
+        logger.info(f"✅ Исходящий звонок инициирован! Response: {response}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка при инициации исходящего звонка: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        # Попробуем альтернативный метод через RingOut API
+        try:
+            logger.info(f"🔄 Пробуем альтернативный метод через RingOut API...")
+            
+            ringout_data = {
+                "from": {
+                    "phoneNumber": "+15135725833"  # Используем основной номер как from
+                },
+                "to": {
+                    "phoneNumber": phone_number
+                },
+                "callerId": {
+                    "phoneNumber": "+15135725833"
+                }
+            }
+            
+            ringout_response = make_request(
+                'POST',
+                '/restapi/v1.0/account/~/extension/~/ringout',
+                ringout_data
+            )
+            
+            logger.info(f"✅ RingOut звонок инициирован! Response: {ringout_response}")
+            return True
+            
+        except Exception as ringout_error:
+            logger.error(f"❌ Ошибка при RingOut звонке: {str(ringout_error)}")
+            return False
 
 @app.route('/calls', methods=['GET'])
 def get_active_calls():
@@ -1126,8 +1272,8 @@ def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[
                 return False
             
             party_status = target_party.get('status', {}).get('code')
-            if party_status != 'Ringing':
-                logger.warning(f"⚠️ Неподходящий статус для ответа: {party_status} (ожидается только Ringing)")
+            if party_status != 'Setup':
+                logger.warning(f"⚠️ Неподходящий статус для ответа: {party_status} (ожидается Setup)")
                 return False
                 
             logger.info(f"✅ Статус звонка подходит для ответа: {party_status}")
@@ -1144,8 +1290,27 @@ def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[
             logger.error("❌ deviceId не предоставлен, невозможно принять звонок")
             return False
         
+        # Проверяем авторизацию перед запросом
+        try:
+            from ringcentral_auth import get_auth_status
+            auth_status = get_auth_status()
+            logger.info(f"🔐 Статус авторизации: {auth_status}")
+        except Exception as auth_error:
+            logger.warning(f"⚠️ Не удалось проверить статус авторизации: {auth_error}")
+            logger.info(f"🔄 Продолжаем без проверки авторизации...")
+        
+        # Логируем все параметры для диагностики
+        logger.info(f"🔍 Диагностика параметров:")
+        logger.info(f"   Session ID: {session_id}")
+        logger.info(f"   Party ID: {party_id}")
+        logger.info(f"   Device ID: {device_id}")
+        logger.info(f"   Caller Info: {caller_info}")
+        
         # ✅ Правильный endpoint для ответа на звонок
         # Документация: https://developers.ringcentral.com/api-reference/Call-Control/answerCall
+        logger.info(f"📤 Отправляем запрос на ответ: POST /restapi/v1.0/account/~/extension/~/telephony/sessions/{session_id}/parties/{party_id}/answer")
+        logger.info(f"📋 Тело запроса: {request_body}")
+        
         response = make_request(
             'POST',
             f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{session_id}/parties/{party_id}/answer',
@@ -1159,6 +1324,12 @@ def answer_call_automatically(session_id: str, party_id: str, caller_info: Dict[
         logger.error(f"❌ Ошибка при автоматическом ответе на звонок: {str(e)}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        # Удаляем из отвеченных звонков при ошибке
+        with answer_lock:
+            answered_calls.discard(call_id)
+            logger.info(f"🗑️ Звонок {call_id} удален из отвеченных при ошибке")
+        
         return False
 
 def play_audio_to_call(session_id: str, party_id: str, audio_data: bytes) -> bool:
