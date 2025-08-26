@@ -15,16 +15,270 @@ const express = require('express');
 // WebSocket полифилл для Node.js
 global.WebSocket = WebSocket;
 
-// Navigator полифилл для Node.js (необходим для WebPhone)
-global.navigator = global.navigator || {
-    userAgent: 'RingCentral-WebPhone-Bridge/1.0.0 (Node.js)',
-    appName: 'RingCentral WebPhone Bridge',
-    appVersion: '1.0.0',
-    mediaDevices: {
-        getUserMedia: () => Promise.reject(new Error('getUserMedia недоступен в Node.js')),
-        enumerateDevices: () => Promise.resolve([])
+// WebRTC полифиллы для Node.js (определяем классы перед использованием)
+class MockMediaStreamTrack {
+    constructor(kind = 'audio') {
+        this.kind = kind;
+        this.id = Math.random().toString(36).substr(2, 9);
+        this.label = `Mock ${kind} track`;
+        this.enabled = true;
+        this.muted = false;
+        this.readyState = 'live';
+        this.onended = null;
+        this.onmute = null;
+        this.onunmute = null;
+        
+        // Дополнительные свойства для совместимости
+        if (kind === 'audio') {
+            this.volume = 1.0;
+            this.echoCancellation = true;
+            this.noiseSuppression = true;
+            this.autoGainControl = true;
+        }
+        
+        console.log(`🔧 MockMediaStreamTrack: создан ${kind} track с ID ${this.id}`);
     }
-};
+
+    stop() {
+        console.log(`🔧 MockMediaStreamTrack: остановлен ${this.kind} track ${this.id}`);
+        this.readyState = 'ended';
+        if (this.onended) {
+            this.onended();
+        }
+    }
+
+    clone() {
+        console.log(`🔧 MockMediaStreamTrack: клонирован ${this.kind} track ${this.id}`);
+        return new MockMediaStreamTrack(this.kind);
+    }
+    
+    getCapabilities() {
+        if (this.kind === 'audio') {
+            return {
+                echoCancellation: [true, false],
+                noiseSuppression: [true, false],
+                autoGainControl: [true, false],
+                channelCount: { min: 1, max: 2 },
+                sampleRate: { min: 8000, max: 96000 },
+                sampleSize: { min: 16, max: 16 }
+            };
+        }
+        return {};
+    }
+    
+    getConstraints() {
+        return {};
+    }
+    
+    getSettings() {
+        if (this.kind === 'audio') {
+            return {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                channelCount: 1,
+                sampleRate: 48000,
+                sampleSize: 16
+            };
+        }
+        return {};
+    }
+}
+
+class MockMediaStream {
+    constructor(tracks = []) {
+        this.id = Math.random().toString(36).substr(2, 9);
+        this._tracks = tracks;
+        this.active = true;
+        this.onaddtrack = null;
+        this.onremovetrack = null;
+        this.onactive = null;
+        this.oninactive = null;
+        
+        console.log(`🔧 MockMediaStream: создан MediaStream с ID ${this.id} и ${tracks.length} треками`);
+        
+        // Обновляем состояние active при изменении треков
+        this._updateActiveState();
+    }
+
+    getTracks() {
+        return this._tracks;
+    }
+
+    getAudioTracks() {
+        return this._tracks.filter(track => track.kind === 'audio');
+    }
+
+    getVideoTracks() {
+        return this._tracks.filter(track => track.kind === 'video');
+    }
+
+    addTrack(track) {
+        console.log(`🔧 MockMediaStream: добавлен track ${track.id} (${track.kind}) в stream ${this.id}`);
+        this._tracks.push(track);
+        this._updateActiveState();
+        
+        if (this.onaddtrack) {
+            this.onaddtrack({ track: track });
+        }
+    }
+
+    removeTrack(track) {
+        const index = this._tracks.indexOf(track);
+        if (index > -1) {
+            console.log(`🔧 MockMediaStream: удален track ${track.id} (${track.kind}) из stream ${this.id}`);
+            this._tracks.splice(index, 1);
+            this._updateActiveState();
+            
+            if (this.onremovetrack) {
+                this.onremovetrack({ track: track });
+            }
+        }
+    }
+
+    clone() {
+        console.log(`🔧 MockMediaStream: клонирован stream ${this.id}`);
+        const clonedTracks = this._tracks.map(track => track.clone());
+        return new MockMediaStream(clonedTracks);
+    }
+    
+    getTrackById(trackId) {
+        return this._tracks.find(track => track.id === trackId) || null;
+    }
+    
+    _updateActiveState() {
+        const wasActive = this.active;
+        this.active = this._tracks.some(track => track.readyState === 'live');
+        
+        if (wasActive && !this.active && this.oninactive) {
+            this.oninactive();
+        } else if (!wasActive && this.active && this.onactive) {
+            this.onactive();
+        }
+    }
+}
+
+// Navigator полифилл для Node.js (необходим для WebPhone)
+// Принудительно перезаписываем navigator.mediaDevices
+if (typeof navigator !== 'undefined') {
+    navigator.mediaDevices = {
+        getUserMedia: (constraints = {}) => {
+            logger.info('🔧 MockMediaDevices: getUserMedia вызван с constraints:', JSON.stringify(constraints));
+            
+            try {
+                // Создаем фиктивные треки в зависимости от constraints
+                const tracks = [];
+                
+                if (constraints.audio) {
+                    const audioTrack = new MockMediaStreamTrack('audio');
+                    tracks.push(audioTrack);
+                    logger.info('🔧 MockMediaDevices: создан audio track:', audioTrack.id);
+                }
+                
+                if (constraints.video) {
+                    const videoTrack = new MockMediaStreamTrack('video');
+                    tracks.push(videoTrack);
+                    logger.info('🔧 MockMediaDevices: создан video track:', videoTrack.id);
+                }
+                
+                // Если нет constraints или они пустые, создаем audio по умолчанию
+                if (!constraints.audio && !constraints.video) {
+                    const audioTrack = new MockMediaStreamTrack('audio');
+                    tracks.push(audioTrack);
+                    logger.info('🔧 MockMediaDevices: создан default audio track:', audioTrack.id);
+                }
+                
+                const stream = new MockMediaStream(tracks);
+                logger.info('🔧 MockMediaDevices: создан MediaStream:', stream.id, 'с треками:', stream.getTracks().length);
+                logger.info('🔧 MockMediaDevices: MediaStream.active:', stream.active);
+                logger.info('🔧 MockMediaDevices: AudioTracks:', stream.getAudioTracks().length);
+                logger.info('🔧 MockMediaDevices: VideoTracks:', stream.getVideoTracks().length);
+                
+                return Promise.resolve(stream);
+            } catch (error) {
+                logger.error('❌ Ошибка в MockMediaDevices.getUserMedia:', error);
+                return Promise.reject(error);
+            }
+        },
+        enumerateDevices: () => Promise.resolve([
+            {
+                deviceId: 'default',
+                groupId: 'default',
+                kind: 'audioinput',
+                label: 'Default Audio Input'
+            },
+            {
+                deviceId: 'default',
+                groupId: 'default', 
+                kind: 'audiooutput',
+                label: 'Default Audio Output'
+            }
+        ])
+    };
+    
+    // Также установим другие свойства navigator если нужно
+    navigator.userAgent = navigator.userAgent || 'RingCentral-WebPhone-Bridge/1.0.0 (Node.js)';
+    navigator.appName = navigator.appName || 'RingCentral WebPhone Bridge';
+    navigator.appVersion = navigator.appVersion || '1.0.0';
+} else {
+    // Если navigator не существует, создаем глобальный
+    global.navigator = {
+        userAgent: 'RingCentral-WebPhone-Bridge/1.0.0 (Node.js)',
+        appName: 'RingCentral WebPhone Bridge',
+        appVersion: '1.0.0',
+        mediaDevices: {
+            getUserMedia: (constraints = {}) => {
+                console.log('🔧 MockMediaDevices: getUserMedia вызван с constraints:', JSON.stringify(constraints));
+                
+                try {
+                    // Создаем фиктивные треки в зависимости от constraints
+                    const tracks = [];
+                    
+                    if (constraints.audio) {
+                        const audioTrack = new MockMediaStreamTrack('audio');
+                        tracks.push(audioTrack);
+                        console.log('🔧 MockMediaDevices: создан audio track:', audioTrack.id);
+                    }
+                    
+                    if (constraints.video) {
+                        const videoTrack = new MockMediaStreamTrack('video');
+                        tracks.push(videoTrack);
+                        console.log('🔧 MockMediaDevices: создан video track:', videoTrack.id);
+                    }
+                    
+                    // Если нет constraints или они пустые, создаем audio по умолчанию
+                    if (!constraints.audio && !constraints.video) {
+                        const audioTrack = new MockMediaStreamTrack('audio');
+                        tracks.push(audioTrack);
+                        console.log('🔧 MockMediaDevices: создан default audio track:', audioTrack.id);
+                    }
+                    
+                    const stream = new MockMediaStream(tracks);
+                    console.log('🔧 MockMediaDevices: создан MediaStream:', stream.id, 'с треками:', stream.getTracks().length);
+                    
+                    return Promise.resolve(stream);
+                } catch (error) {
+                    console.error('❌ Ошибка в MockMediaDevices.getUserMedia:', error);
+                    return Promise.reject(error);
+                }
+            },
+            enumerateDevices: () => Promise.resolve([
+                {
+                    deviceId: 'default',
+                    groupId: 'default',
+                    kind: 'audioinput',
+                    label: 'Default Audio Input'
+                },
+                {
+                    deviceId: 'default',
+                    groupId: 'default', 
+                    kind: 'audiooutput',
+                    label: 'Default Audio Output'
+                }
+            ])
+        }
+    };
+}
 
 // WebRTC полифиллы для Node.js (необходимы для WebPhone)
 class MockRTCPeerConnection {
@@ -126,59 +380,7 @@ class MockRTCDataChannel {
     }
 }
 
-class MockMediaStream {
-    constructor(tracks = []) {
-        this.id = Math.random().toString(36).substr(2, 9);
-        this._tracks = tracks;
-        this.active = true;
-    }
 
-    getTracks() {
-        return this._tracks;
-    }
-
-    getAudioTracks() {
-        return this._tracks.filter(track => track.kind === 'audio');
-    }
-
-    getVideoTracks() {
-        return this._tracks.filter(track => track.kind === 'video');
-    }
-
-    addTrack(track) {
-        this._tracks.push(track);
-    }
-
-    removeTrack(track) {
-        const index = this._tracks.indexOf(track);
-        if (index > -1) {
-            this._tracks.splice(index, 1);
-        }
-    }
-
-    clone() {
-        return new MockMediaStream([...this._tracks]);
-    }
-}
-
-class MockMediaStreamTrack {
-    constructor(kind = 'audio') {
-        this.kind = kind;
-        this.id = Math.random().toString(36).substr(2, 9);
-        this.label = `Mock ${kind} track`;
-        this.enabled = true;
-        this.muted = false;
-        this.readyState = 'live';
-    }
-
-    stop() {
-        this.readyState = 'ended';
-    }
-
-    clone() {
-        return new MockMediaStreamTrack(this.kind);
-    }
-}
 
 // Устанавливаем глобальные WebRTC объекты
 global.RTCPeerConnection = MockRTCPeerConnection;
