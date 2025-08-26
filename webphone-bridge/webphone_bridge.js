@@ -177,6 +177,7 @@ async function initializeWebPhone() {
         // WebPhone конструктор ожидает объект с полем sipInfo
         const webPhoneOptions = {
             sipInfo: sipInfo,
+            autoAnswer: true,  // 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ - автоматический прием звонков
             logLevel: webPhoneConfig.logLevel,
             audioHelper: webPhoneConfig.audioHelper,
             media: webPhoneConfig.media,
@@ -186,6 +187,7 @@ async function initializeWebPhone() {
         };
         
         logger.info('🔧 WebPhone опции:', JSON.stringify(webPhoneOptions, null, 2));
+        logger.info('✅ WebPhone создается с autoAnswer: true для автоматического приема звонков');
         
         // Попробуем создать WebPhone с правильной структурой
         try {
@@ -200,6 +202,7 @@ async function initializeWebPhone() {
             try {
                 webPhone = new WebPhone({
                     sipInfo: sipInfo,
+                    autoAnswer: true,  // 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ
                     logLevel: 1,
                     appName: 'RingCentral WebPhone Bridge',
                     appVersion: '1.0.0',
@@ -212,6 +215,7 @@ async function initializeWebPhone() {
                 logger.info('🔄 Попытка минимальной инициализации WebPhone...');
                 webPhone = new WebPhone({
                     sipInfo: sipInfo,
+                    autoAnswer: true,  // 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ
                     userAgent: 'RingCentral-WebPhone-Bridge/1.0.0'
                 });
             }
@@ -253,6 +257,98 @@ async function initializeWebPhone() {
         
         // Регистрация обработчиков событий
         setupWebPhoneEventHandlers();
+        
+        // 🔥 ВОССТАНОВЛЕНИЕ ПРИ СЕТЕВЫХ ПРОБЛЕМАХ
+        if (typeof window !== 'undefined') {
+            window.addEventListener('online', async () => {
+                console.log('🌐 Сеть восстановлена, перезапускаем WebPhone...');
+                try {
+                    await webPhone.start();
+                    console.log('✅ WebPhone восстановлен');
+                } catch (error) {
+                    console.error('❌ Ошибка восстановления:', error);
+                }
+            });
+        }
+        
+        // 🔥 ОСНОВНОЙ ОБРАБОТЧИК АВТОПРИЕМА ЗВОНКОВ
+        webPhone.on('inboundCall', async (inboundCallSession) => {
+            const callId = inboundCallSession.callId || `call_${Date.now()}`;
+            const from = inboundCallSession.remoteIdentity?.uri || inboundCallSession.remoteIdentity?.displayName || 'unknown';
+            
+            console.log('📞 ВХОДЯЩИЙ ЗВОНОК ПОЛУЧЕН ЧЕРЕЗ WEBPHONE!');
+            console.log('📋 Информация:', {
+                callId,
+                sessionId: inboundCallSession.sessionId,
+                from,
+                state: inboundCallSession.state
+            });
+
+            try {
+                // Проверка лимита активных звонков
+                if (activeCalls.size >= config.maxConcurrentCalls) {
+                    console.log('⚠️ Достигнут лимит звонков, отклоняем');
+                    await inboundCallSession.decline();
+                    return;
+                }
+
+                // 🔥 АВТОМАТИЧЕСКИЙ ПРИЕМ
+                console.log('🤖 Автоматически принимаем звонок через WebPhone...');
+                await inboundCallSession.answer();
+                console.log('✅ Звонок ПРИНЯТ автоматически через WebPhone!');
+
+                // Обработка принятого звонка
+                handleAcceptedCall(inboundCallSession, callId, from);
+
+            } catch (error) {
+                console.error('❌ Ошибка автоприема через WebPhone:', error);
+                
+                // Fallback - голосовая почта
+                try {
+                    await inboundCallSession.toVoicemail();
+                    console.log('📧 Перенаправлено в голосовую почту');
+                } catch (fallbackError) {
+                    console.error('❌ Ошибка fallback:', fallbackError);
+                }
+            }
+        });
+        
+        // 🔥 ФУНКЦИЯ ОБРАБОТКИ ПРИНЯТОГО ЗВОНКА
+        function handleAcceptedCall(callSession, callId, from) {
+            console.log('🎯 Обрабатываем принятый звонок от:', from);
+
+            // События звонка
+            callSession.on('answered', () => {
+                console.log('✅ Звонок подтвержден как отвеченный');
+                // Интеграция с Voice AI
+                startVoiceAI(callSession, from);
+            });
+
+            callSession.on('disposed', () => {
+                console.log('📞 Звонок завершен:', callId);
+                processedCalls.delete(callId);
+            });
+
+            callSession.on('mediaStreamSet', (mediaStream) => {
+                console.log('🎵 Медиа поток установлен');
+                // Подключение аудио процессора для Voice AI
+                connectAudioProcessor(mediaStream, callSession);
+            });
+
+            // Добавляем в обработанные
+            processedCalls.add(callId);
+        }
+
+        function startVoiceAI(callSession, from) {
+            console.log('🤖 Запуск Voice AI для звонка от:', from);
+            // Здесь интеграция с voice_ai_engine.py
+            // Например: отправка HTTP запроса или WebSocket сообщения
+        }
+
+        function connectAudioProcessor(mediaStream, callSession) {
+            console.log('🔊 Подключение аудио процессора для Voice AI...');
+            // Здесь интеграция с speech_processor.py
+        }
         
         // ДОБАВЬТЕ ЭТО: Принудительная регистрация
         logger.info('🔄 Запуск регистрации WebPhone...');
@@ -491,6 +587,7 @@ async function attemptDeviceReregistration() {
         
         const webPhoneOptions = {
             sipInfo: sipInfo,
+            autoAnswer: true,  // 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ
             logLevel: 1,
             audioHelper: { enabled: true },
             media: { remote: null, local: null },
@@ -1170,16 +1267,9 @@ async function handleWebhookEvent(eventData) {
                         logger.info(`📞 Звонок от: ${inboundCall.from?.phoneNumber || 'Неизвестно'}`);
                         logger.info(`📞 Статус: ${inboundCall.status.code}`);
                         
-                        // ✅ Автоматически принимаем звонок в статусе Setup
-                        logger.info('🤖 Автоматически принимаем звонок через API...');
-                        
-                        // Принудительно принимаем звонок
-                        const success = await forceAnswerCall(body.sessionId);
-                        if (success) {
-                            logger.info(`✅ Звонок успешно принят!`);
-                        } else {
-                            logger.warn(`⚠️ Не удалось принять звонок`);
-                        }
+                        // 🔥 НЕ ПЫТАЕМСЯ ПРИНИМАТЬ ЧЕРЕЗ REST API
+                        // WebPhone с autoAnswer: true + обработчик inboundCall сделают это автоматически
+                        logger.info('✅ WebPhone автоматически обработает этот звонок');
                     } else {
                         // Проверяем, есть ли звонки в других статусах
                         const otherInboundCall = body.parties.find(party => 
@@ -1430,109 +1520,8 @@ async function forceDeviceRegistration() {
     }
 }
 
-/**
- * Принудительный прием звонка через Call Control API
- */
-async function forceAnswerCall(sessionId) {
-    try {
-        logger.info(`🔄 Принудительный прием звонка через Call Control API: ${sessionId}`);
-        
-        // Проверяем авторизацию
-        if (!platform || !platform.accessToken()) {
-            logger.error(`❌ Платформа не авторизована`);
-            return false;
-        }
-        
-        logger.info(`🔐 Платформа авторизована, токен: ${platform.accessToken().substring(0, 20)}...`);
-        
-        // Получаем информацию о сессии
-        logger.info(`📤 Запрашиваем информацию о сессии: GET /restapi/v1.0/account/~/extension/~/telephony/sessions/${sessionId}`);
-        
-        try {
-            const sessionResponse = await platform.get(`/restapi/v1.0/account/~/extension/~/telephony/sessions/${sessionId}`);
-            const sessionInfo = await sessionResponse.json();
-            logger.info(`✅ Информация о сессии получена успешно`);
-        } catch (sessionError) {
-            logger.error(`❌ Ошибка получения информации о сессии: ${sessionError.message}`);
-            logger.error(`❌ HTTP Status: ${sessionError.response?.status}`);
-            logger.error(`❌ Response: ${sessionError.response?.data}`);
-            
-            // Попробуем альтернативный endpoint без extension
-            try {
-                logger.info(`🔄 Пробуем альтернативный endpoint без extension...`);
-                const altSessionResponse = await platform.get(`/restapi/v1.0/account/~/telephony/sessions/${sessionId}`);
-                const altSessionInfo = await altSessionResponse.json();
-                logger.info(`✅ Информация о сессии получена через альтернативный endpoint`);
-                sessionInfo = altSessionInfo;
-            } catch (altError) {
-                logger.error(`❌ Альтернативный endpoint тоже не работает: ${altError.message}`);
-                return false;
-            }
-        }
-        
-        logger.info('📋 Информация о сессии:', JSON.stringify(sessionInfo, null, 2));
-        
-        // Логируем все parties в сессии
-        const parties = sessionInfo.parties || [];
-        logger.info(`📋 Всего parties в сессии: ${parties.length}`);
-        parties.forEach((party, index) => {
-            logger.info(`  Party ${index}: id=${party.id}, direction=${party.direction}, status=${party.status?.code}, missedCall=${party.missedCall}`);
-        });
-        
-        // Находим party ID для входящего звонка - в статусе Setup
-        const inboundParty = sessionInfo.parties.find(party => 
-            party.direction === 'Inbound' && 
-            party.status && 
-            party.status.code === 'Setup' &&  // ✅ Принимаем в статусе Setup
-            !party.missedCall
-        );
-        
-        if (inboundParty) {
-            const partyId = inboundParty.id;
-            logger.info(`📞 Найден входящий звонок, Party ID: ${partyId}`);
-            logger.info(`📋 Полная информация о party:`, JSON.stringify(inboundParty, null, 2));
-            
-            // Получаем deviceId из данных получателя в webhook событии
-            const toData = inboundParty.to || {};
-            const deviceId = toData.deviceId || global.registeredDeviceId || config.deviceId;
-            
-            if (!deviceId) {
-                logger.error('❌ Device ID не найден для приема звонка');
-                return false;
-            }
-            
-            const answerBody = {
-                deviceId: deviceId
-            };
-            
-            logger.info(`📱 Принимаем звонок на устройство: ${deviceId}`);
-            
-            // ✅ ПРАВИЛЬНЫЙ endpoint с extension
-            const answerEndpoint = `/restapi/v1.0/account/~/extension/~/telephony/sessions/${sessionId}/parties/${partyId}/answer`;
-            logger.info(`📤 Отправляем запрос на ответ: POST ${answerEndpoint}`);
-            logger.info(`📋 Тело запроса:`, JSON.stringify(answerBody, null, 2));
-            
-            const answerResponse = await platform.post(answerEndpoint, answerBody);
-            const answerResult = await answerResponse.json();
-            
-            logger.info('✅ Звонок принудительно принят через Call Control API');
-            logger.info('📋 Результат приема:', JSON.stringify(answerResult, null, 2));
-            
-            return true;
-        } else {
-            logger.warn('⚠️ Входящий звонок в статусе Setup не найден');
-            return false;
-        }
-        
-    } catch (error) {
-        logger.error(`❌ Ошибка принудительного приема звонка: ${error.message}`);
-        if (error.response) {
-            logger.error(`❌ HTTP Status: ${error.response.status}`);
-            logger.error(`❌ Response: ${JSON.stringify(error.response.data, null, 2)}`);
-        }
-        return false;
-    }
-}
+// 🔥 УДАЛЕНА ФУНКЦИЯ forceAnswerCall - больше не нужна
+// WebPhone с autoAnswer: true автоматически обрабатывает входящие звонки
 
 /**
  * Обновление WebPhone с новыми SIP данными
