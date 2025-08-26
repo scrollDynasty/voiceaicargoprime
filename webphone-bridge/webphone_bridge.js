@@ -965,10 +965,62 @@ function cleanupCall(callId) {
 }
 
 /**
+ * Обработка webhook событий от RingCentral
+ */
+async function handleWebhookEvent(eventData) {
+    try {
+        logger.info('📞 Обработка webhook события...');
+        logger.info('📋 Данные события:', JSON.stringify(eventData, null, 2));
+        
+        // Проверяем, что это telephony событие
+        if (eventData.event && eventData.event.includes('telephony/sessions')) {
+            logger.info('📞 Обнаружено telephony событие');
+            
+            const body = eventData.body;
+            if (body && body.sessionId) {
+                logger.info(`📞 Найден sessionId: ${body.sessionId}`);
+                
+                // Проверяем, есть ли входящие звонки в состоянии Setup
+                if (body.parties) {
+                    const inboundCall = body.parties.find(party => 
+                        party.direction === 'Inbound' && 
+                        party.status && 
+                        party.status.code === 'Setup'
+                    );
+                    
+                    if (inboundCall) {
+                        logger.info('🔔 ВХОДЯЩИЙ ЗВОНОК ОБНАРУЖЕН!');
+                        logger.info(`📞 Звонок от: ${inboundCall.from?.phoneNumber || 'Неизвестно'}`);
+                        logger.info('🤖 Автоматически принимаем звонок...');
+                        
+                        // Принудительно принимаем звонок
+                        await forceAnswerCall(body.sessionId);
+                    } else {
+                        logger.info('📋 Проверяем все parties в событии:');
+                        body.parties.forEach((party, index) => {
+                            logger.info(`  Party ${index}: direction=${party.direction}, status=${party.status?.code}, missedCall=${party.missedCall}`);
+                        });
+                    }
+                }
+            }
+        } else {
+            logger.info('📋 Не telephony событие, пропускаем');
+        }
+        
+    } catch (error) {
+        logger.error(`❌ Ошибка обработки webhook события: ${error.message}`);
+    }
+}
+
+/**
  * Инициализация WebSocket сервера для аудио стриминга
  */
 function initializeWebSocketServer() {
     const app = express();
+    
+    // Добавляем middleware для парсинга JSON
+    app.use(express.json());
+    
     const server = require('http').createServer(app);
     
     wsServer = new WebSocket.Server({ server });
@@ -980,6 +1032,43 @@ function initializeWebSocketServer() {
         ws.on('error', (error) => {
             logger.error(`❌ WebSocket ошибка: ${error.message}`);
         });
+    });
+    
+    // Добавляем HTTP endpoint для получения webhook событий от Python сервера
+    app.post('/webhook', (req, res) => {
+        try {
+            const eventData = req.body;
+            logger.info('📞 Получено webhook событие от Python сервера');
+            
+            // Обрабатываем webhook событие
+            handleWebhookEvent(eventData);
+            
+            res.status(200).json({ status: 'ok' });
+        } catch (error) {
+            logger.error(`❌ Ошибка обработки webhook: ${error.message}`);
+            res.status(500).json({ error: error.message });
+        }
+    });
+    
+    // Добавляем endpoint для получения статуса WebPhone Bridge
+    app.get('/status', (req, res) => {
+        try {
+            const status = {
+                webPhoneExists: !!webPhone,
+                isRegistered: isWebPhoneRegistered,
+                activeCalls: activeCalls.size,
+                maxCalls: config.maxConcurrentCalls,
+                deviceRegistered: !!global.registeredDeviceId,
+                deviceId: global.registeredDeviceId || null,
+                deviceStatus: global.deviceInfo ? global.deviceInfo.status : 'unknown',
+                timestamp: new Date().toISOString()
+            };
+            
+            res.status(200).json(status);
+        } catch (error) {
+            logger.error(`❌ Ошибка получения статуса: ${error.message}`);
+            res.status(500).json({ error: error.message });
+        }
     });
     
     // Автоматический поиск свободного порта
@@ -1121,6 +1210,59 @@ async function forceDeviceRegistration() {
         
     } catch (error) {
         logger.error(`❌ Ошибка принудительной регистрации устройства: ${error.message}`);
+        if (error.response) {
+            logger.error(`❌ HTTP Status: ${error.response.status}`);
+            logger.error(`❌ Response: ${JSON.stringify(error.response.data, null, 2)}`);
+        }
+    }
+}
+
+/**
+ * Принудительный прием звонка через Call Control API
+ */
+async function forceAnswerCall(sessionId) {
+    try {
+        logger.info(`🔄 Принудительный прием звонка через Call Control API: ${sessionId}`);
+        
+        // Сначала получаем информацию о сессии
+        const sessionResponse = await platform.get(`/restapi/v1.0/account/~/telephony/sessions/${sessionId}`);
+        const sessionInfo = await sessionResponse.json();
+        
+        logger.info('📋 Информация о сессии:', JSON.stringify(sessionInfo, null, 2));
+        
+        // Находим party ID для входящего звонка
+        const inboundParty = sessionInfo.parties.find(party => 
+            party.direction === 'Inbound' && 
+            party.status && 
+            party.status.code === 'Setup'
+        );
+        
+        if (inboundParty) {
+            const partyId = inboundParty.id;
+            logger.info(`📞 Найден входящий звонок, Party ID: ${partyId}`);
+            
+            // Используем deviceId из конфигурации для приема звонка
+            const answerBody = {
+                deviceId: config.deviceId
+            };
+            
+            logger.info(`📱 Принимаем звонок на устройство: ${config.deviceId}`);
+            
+            // Принимаем звонок через Call Control API с deviceId
+            const answerResponse = await platform.post(
+                `/restapi/v1.0/account/~/telephony/sessions/${sessionId}/parties/${partyId}/answer`,
+                answerBody
+            );
+            const answerResult = await answerResponse.json();
+            
+            logger.info('✅ Звонок принудительно принят через Call Control API');
+            logger.info('📋 Результат приема:', JSON.stringify(answerResult, null, 2));
+        } else {
+            logger.warn('⚠️ Входящий звонок не найден в сессии');
+        }
+        
+    } catch (error) {
+        logger.error(`❌ Ошибка принудительного приема звонка: ${error.message}`);
         if (error.response) {
             logger.error(`❌ HTTP Status: ${error.response.status}`);
             logger.error(`❌ Response: ${JSON.stringify(error.response.data, null, 2)}`);
