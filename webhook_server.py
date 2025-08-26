@@ -18,6 +18,7 @@ import time
 from functools import wraps
 
 from voice_ai_engine import voice_ai_engine
+from speech_processor import async_synthesize
 from config import Config
 from ringcentral_auth import make_request
 
@@ -121,72 +122,165 @@ def webhook_test():
     logger.info("Получен тестовый POST запрос")
     return jsonify({"status": "ok", "message": "Webhook is working"}), 200
 
+@app.route('/test/webhook', methods=['POST'])
+def test_webhook():
+    """Тестовый endpoint для проверки webhook событий"""
+    try:
+        logger.info("🧪 ТЕСТОВЫЙ WEBHOOK - получен запрос")
+        
+        # Логируем все заголовки
+        logger.info(f"🧪 Заголовки: {dict(request.headers)}")
+        
+        # Логируем данные
+        raw_data = request.get_data()
+        logger.info(f"🧪 Сырые данные: {raw_data[:500]}")
+        
+        if raw_data:
+            try:
+                webhook_data = json.loads(raw_data.decode('utf-8'))
+                logger.info(f"🧪 JSON данные: {json.dumps(webhook_data, indent=2)}")
+            except json.JSONDecodeError as e:
+                logger.error(f"🧪 Ошибка парсинга JSON: {e}")
+        
+        return jsonify({"status": "test_received", "message": "Test webhook working"}), 200
+        
+    except Exception as e:
+        logger.error(f"🧪 Ошибка тестового webhook: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/webhook', methods=['GET', 'POST'])
 @disable_auto_json_parsing
 def ringcentral_webhook():
     """
     Обработчик webhook от RingCentral
     
-    GET: Валидация подписки с hub.challenge
-    POST: Обработка webhook событий
+    GET запросы:
+    - hub.challenge: Валидация подписки (возвращает challenge как plain text)
+    - caller, name, called: Входящий звонок от External App
+    
+    POST запросы:
+    - Пустой POST: Валидация webhook (возвращает Validation-Token)
+    - JSON данные: Обработка webhook событий
     """
-    # Обработка GET запросов для валидации
+    logger.info(f"📞 Получен {request.method} запрос на /webhook")
+    
+    # Обработка GET запросов
     if request.method == 'GET':
+        logger.info(f"🔍 GET параметры: {dict(request.args)}")
+        
+        # 1. Проверяем hub.challenge для верификации webhook URL
         challenge = request.args.get('hub.challenge')
         if challenge:
-            logger.info(f"Получен validation challenge: {challenge}")
-            return Response(challenge, content_type='text/plain')
-        else:
-            logger.warning("GET запрос без hub.challenge параметра")
-            return jsonify({"error": "Missing hub.challenge"}), 400
+            logger.info(f"✅ Получен validation challenge: {challenge}")
+            # Возвращаем challenge как plain text (не JSON!)
+            response = Response(challenge, content_type='text/plain')
+            logger.info(f"📤 Отправляем ответ: {challenge}")
+            return response
+        
+        # 2. Проверяем параметры входящего звонка от External App
+        caller = request.args.get('caller')
+        name = request.args.get('name')
+        called = request.args.get('called')
+        
+        # Проверяем наличие параметров (даже если они пустые)
+        has_call_params = 'caller' in request.args or 'name' in request.args or 'called' in request.args
+        
+        if has_call_params:
+            logger.info(f"📞 Получен входящий звонок через External App")
+            logger.info(f"   Звонящий: {caller or 'Unknown'}")
+            logger.info(f"   Имя: {name or 'Unknown'}")
+            logger.info(f"   Вызываемый номер: {called or 'Unknown'}")
+            
+            # Обрабатываем звонок
+            call_data = {
+                'caller': caller or 'Unknown',
+                'name': name or 'Unknown',
+                'called': called or 'Unknown',
+                'source': 'external_app'
+            }
+            
+            # Запускаем обработку звонка в отдельном потоке
+            threading.Thread(target=process_call, args=(call_data,)).start()
+            
+            return jsonify({
+                "status": "call_received",
+                "message": "Call processing started",
+                "caller": caller or 'Unknown',
+                "name": name or 'Unknown',
+                "called": called or 'Unknown'
+            }), 200
+        
+        # 3. Если нет известных параметров
+        logger.warning("❌ GET запрос без известных параметров")
+        logger.warning(f"📋 Доступные параметры: {dict(request.args)}")
+        return jsonify({
+            "error": "Missing required parameters",
+            "expected": ["hub.challenge", "caller", "name", "called"],
+            "received": dict(request.args)
+        }), 400
     
     # Обработка POST запросов
     elif request.method == 'POST':
+        logger.info(f"📨 POST запрос на /webhook")
+        
         # Логируем заголовки для отладки
-        logger.debug(f"Headers: {dict(request.headers)}")
+        logger.debug(f"📋 Заголовки: {dict(request.headers)}")
         
         # Получаем сырые данные
         raw_data = request.get_data()
+        logger.debug(f"📦 Размер данных: {len(raw_data)} байт")
         
-        # Проверяем есть ли данные
+        # 1. Проверяем пустой POST запрос для валидации webhook
         if not raw_data:
-            logger.info("Получен пустой POST запрос для валидации webhook")
+            logger.info("✅ Получен пустой POST запрос для валидации webhook")
             
             # Проверяем наличие Validation-Token в заголовках
             validation_token = request.headers.get('Validation-Token')
             if validation_token:
-                logger.info(f"Возвращаем Validation-Token: {validation_token}")
+                logger.info(f"🔑 Возвращаем Validation-Token: {validation_token}")
                 # Создаем ответ с заголовком Validation-Token
                 response = make_response(jsonify({"status": "ok"}), 200)
                 response.headers['Validation-Token'] = validation_token
+                response.headers['Content-Type'] = 'application/json'
                 return response
             else:
+                logger.info("📤 Возвращаем простой OK ответ")
                 return jsonify({"status": "ok"}), 200
         
-        # Проверка подписи webhook (делаем до парсинга JSON)
+        # 2. Проверка подписи webhook (делаем до парсинга JSON)
         if not _verify_webhook_signature(request):
-            logger.warning("Неверная подпись webhook")
+            logger.warning("❌ Неверная подпись webhook")
             return jsonify({"error": "Invalid signature"}), 401
         
-        # Пытаемся распарсить JSON
+        # 3. Пытаемся распарсить JSON
         try:
             webhook_data = json.loads(raw_data.decode('utf-8'))
+            logger.info(f"📋 Получено webhook событие: {json.dumps(webhook_data, indent=2)}")
         except json.JSONDecodeError as e:
-            logger.error(f"Ошибка парсинга JSON данных: {e}")
-            logger.error(f"Raw data: {raw_data[:500]}")  # Логируем первые 500 символов
+            logger.error(f"❌ Ошибка парсинга JSON данных: {e}")
+            logger.error(f"📄 Raw data: {raw_data[:500]}")  # Логируем первые 500 символов
             return jsonify({"error": "Invalid JSON"}), 400
         
-        logger.info(f"Получено webhook событие: {json.dumps(webhook_data, indent=2)}")
+        # 4. Обработка webhook события
+        event_type = webhook_data.get('eventType', 'unknown')
+        uuid = webhook_data.get('uuid', 'unknown')
+        logger.info(f"🔍 Тип события: {event_type}, UUID: {uuid}")
         
         # Извлекаем body из webhook payload
         body = webhook_data.get('body', {})
         
         # Проверяем наличие telephonySessionId для telephony событий
         if body.get('telephonySessionId'):
+            logger.info(f"📞 Обрабатываем telephony событие")
             return _handle_telephony_session(body)
         else:
-            logger.info(f"Не telephony событие: {webhook_data.get('uuid', 'unknown')}")
+            logger.info(f"📋 Не telephony событие: {webhook_data.get('uuid', 'unknown')}")
             return jsonify({"status": "received"}), 200
+    
+    # Неподдерживаемый метод
+    else:
+        logger.warning(f"❌ Неподдерживаемый метод: {request.method}")
+        return jsonify({"error": "Method not allowed"}), 405
 
 def _verify_webhook_signature(request) -> bool:
     """
@@ -289,25 +383,8 @@ def _handle_telephony_session(session_data: Dict[str, Any]) -> Response:
                 with call_lock:
                     active_calls[call_data["callId"]] = call_data
                 
-                # Обрабатываем звонок асинхронно
-                def process_incoming_call():
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        logger.info(f"🚀 Запускаем автоматический ответ на звонок {call_data['callId']}")
-                        # Автоматически отвечаем на звонок
-                        loop.run_until_complete(
-                            _answer_and_process_call(call_data)
-                        )
-                    except Exception as e:
-                        logger.error(f"❌ Ошибка обработки входящего звонка: {e}")
-                        import traceback
-                        logger.error(f"Traceback: {traceback.format_exc()}")
-                    finally:
-                        loop.close()
-                
-                # Запускаем обработку в фоновом потоке
-                thread = threading.Thread(target=process_incoming_call)
+                # Обрабатываем звонок в фоновом потоке
+                thread = threading.Thread(target=process_call, args=(call_data,))
                 thread.daemon = True
                 thread.start()
                 logger.info(f"📋 Запущен фоновый поток для обработки звонка {call_data['callId']}")
@@ -503,7 +580,7 @@ def create_subscription():
 async def _create_webhook_subscription():
     """Создать webhook подписку для telephony/sessions событий"""
     try:
-        # Фильтры событий для telephony sessions
+        # Простой фильтр событий для тестирования
         event_filters = [
             '/restapi/v1.0/account/~/extension/~/telephony/sessions'
         ]
@@ -523,6 +600,8 @@ async def _create_webhook_subscription():
             'deliveryMode': delivery_mode,
             'expiresIn': 86400  # 24 часа
         }
+        
+        logger.info(f"📋 Данные подписки: {json.dumps(subscription_data, indent=2)}")
         
         # Создаем подписку через новую систему авторизации
         from ringcentral_auth import make_request
@@ -604,6 +683,143 @@ def internal_error(error):
     """Обработка 500 ошибок"""
     logger.error(f"Internal server error: {error}")
     return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/call', methods=['POST'])
+def handle_incoming_call():
+    """Обработка входящих звонков через переадресацию"""
+    try:
+        logger.info("📞 Получен входящий звонок через переадресацию")
+        
+        # Получаем данные звонка
+        call_data = request.get_json()
+        if not call_data:
+            logger.error("Нет данных о звонке")
+            return jsonify({"error": "No call data"}), 400
+        
+        logger.info(f"Данные звонка: {json.dumps(call_data, indent=2)}")
+        
+        # Извлекаем информацию о звонке
+        from_number = call_data.get('from', {}).get('phoneNumber', 'Unknown')
+        to_number = call_data.get('to', {}).get('phoneNumber', 'Unknown')
+        
+        logger.info(f"📞 Звонок от {from_number} на {to_number}")
+        
+        # Обрабатываем звонок в фоновом потоке
+        thread = threading.Thread(target=process_call, args=(call_data,))
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            "status": "received",
+            "message": "Call processed",
+            "from": from_number,
+            "to": to_number
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Ошибка обработки входящего звонка: {e}")
+        return jsonify({"error": str(e)}), 500
+
+def process_call(call_data: Dict[str, Any]):
+    """
+    Обработка входящего звонка
+    
+    Args:
+        call_data: Данные о звонке (может быть от webhook или External App)
+    """
+    try:
+        logger.info(f"📞 Начинаем обработку звонка: {call_data}")
+        
+        # Определяем источник звонка
+        source = call_data.get('source', 'webhook')
+        
+        if source == 'external_app':
+            # Звонок от External App (GET запрос с параметрами)
+            caller = call_data.get('caller', 'Unknown')
+            name = call_data.get('name', 'Unknown')
+            called = call_data.get('called', 'Unknown')
+            
+            logger.info(f"📞 Звонок от External App:")
+            logger.info(f"   Звонящий: {caller}")
+            logger.info(f"   Имя: {name}")
+            logger.info(f"   Вызываемый номер: {called}")
+            
+            # Для External App звонков мы не можем автоматически ответить
+            # так как у нас нет telephony session ID
+            logger.info("⚠️ External App звонок - автоматический ответ недоступен")
+            
+            # Генерируем приветствие для демонстрации
+            greeting = f"Hi {name}! Welcome to Prime Cargo Logistics! I'm here to help you with anything you need today! How can I assist you?"
+            
+        else:
+            # Звонок от webhook (есть telephony session ID)
+            telephony_session_id = call_data.get('telephonySessionId')
+            party_id = call_data.get('partyId')
+            
+            logger.info(f"📞 Звонок от webhook:")
+            logger.info(f"   Session ID: {telephony_session_id}")
+            logger.info(f"   Party ID: {party_id}")
+            
+            # 1. Автоматически отвечаем на звонок
+            if telephony_session_id and party_id:
+                logger.info("📞 Отвечаем на звонок...")
+                try:
+                    make_request(
+                        'POST',
+                        f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{telephony_session_id}/parties/{party_id}/answer'
+                    )
+                    logger.info("✅ Звонок принят автоматически")
+                except Exception as e:
+                    logger.error(f"❌ Ошибка ответа на звонок: {e}")
+            
+            greeting = "Hi there! Welcome to Prime Cargo Logistics! I'm here to help you with anything you need today! How can I assist you?"
+        
+        # 2. Генерируем приветствие
+        logger.info("🎵 Генерируем TTS приветствие...")
+        
+        # Создаем TTS аудио
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            audio_file = loop.run_until_complete(async_synthesize(greeting))
+            logger.info(f"✅ Приветствие сгенерировано: {len(audio_file)} байт аудио")
+        finally:
+            loop.close()
+        
+        # 3. Воспроизводим аудио в звонке (только для webhook звонков)
+        if source == 'webhook' and telephony_session_id and party_id and audio_file:
+            try:
+                logger.info("🔊 Отправляем аудио в звонок...")
+                # Отправляем аудио в звонок
+                make_request(
+                    'POST',
+                    f'/restapi/v1.0/account/~/extension/~/telephony/sessions/{telephony_session_id}/parties/{party_id}/play',
+                    {
+                        'audioFile': audio_file,
+                        'playMode': 'play'
+                    }
+                )
+                logger.info("🔊 Аудио отправлено в звонок")
+            except Exception as e:
+                logger.error(f"❌ Ошибка воспроизведения аудио: {e}")
+        elif source == 'external_app':
+            logger.info("📝 External App звонок - аудио сохранено для демонстрации")
+            # Сохраняем аудио в файл для демонстрации
+            import os
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"recordings/external_call_{timestamp}.wav"
+            os.makedirs("recordings", exist_ok=True)
+            with open(filename, "wb") as f:
+                f.write(audio_file)
+            logger.info(f"💾 Аудио сохранено в {filename}")
+        
+        logger.info("✅ Обработка звонка завершена")
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка обработки звонка: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
 
 if __name__ == '__main__':
     start_server()
