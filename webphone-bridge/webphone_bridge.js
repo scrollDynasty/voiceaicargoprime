@@ -306,6 +306,12 @@ async function initializeWebPhone() {
                         logger.info(`   - wsc.url: ${webPhone.sipClient.wsc.url}`);
                     }
                 }
+                
+                // Принудительно устанавливаем флаг регистрации, если WebSocket соединение активно
+                if (webPhone.sipClient && webPhone.sipClient.wsc && webPhone.sipClient.wsc.readyState === 1) {
+                    logger.info('✅ WebSocket соединение активно, устанавливаем флаг регистрации');
+                    isWebPhoneRegistered = true;
+                }
             }, 2000);
             
         } catch (error) {
@@ -565,6 +571,12 @@ function setupWebPhoneEventHandlers() {
         
         webPhone.sipClient.on('connected', () => {
             logger.info('🔗 SipClient подключен к серверу');
+            isWebPhoneRegistered = true;
+        });
+        
+        webPhone.sipClient.on('registered', () => {
+            logger.info('✅ SipClient зарегистрирован на сервере');
+            isWebPhoneRegistered = true;
         });
         
         webPhone.sipClient.on('disconnected', () => {
@@ -577,7 +589,29 @@ function setupWebPhoneEventHandlers() {
         webPhone.sipClient.emit = function(...args) {
             if (args[0] !== 'message') { // Исключаем частые сообщения
                 logger.info(`🔍 SipClient Event: ${args[0]}`, args.slice(1));
+            } else {
+                // Обрабатываем SIP сообщения для отслеживания регистрации
+                const message = args[1];
+                if (message && message.method === 'REGISTER' && message.statusCode === 200) {
+                    logger.info('✅ SIP REGISTER успешно завершен (200 OK)');
+                    isWebPhoneRegistered = true;
+                }
             }
+            
+            // Обработка входящих звонков
+            if (args[0] === 'invite' || args[0] === 'incoming') {
+                logger.info('🔔 ВХОДЯЩИЙ ЗВОНОК ОБНАРУЖЕН В SIPCLIENT!');
+                const session = args[1];
+                if (session && session.accept) {
+                    logger.info('🤖 Автоматически принимаем входящий звонок...');
+                    session.accept().then(() => {
+                        logger.info('✅ Звонок принят через sipClient!');
+                    }).catch((error) => {
+                        logger.error(`❌ Ошибка приема звонка: ${error.message}`);
+                    });
+                }
+            }
+            
             return originalEmit.apply(this, args);
         };
     }
@@ -607,6 +641,23 @@ function setupWebPhoneEventHandlers() {
         });
     }
     
+    // Обработчик входящих звонков (альтернативный)
+    webPhone.on('call', (call) => {
+        logger.info('🔔 ВХОДЯЩИЙ ЗВОНОК ОБНАРУЖЕН (call event)!');
+        logger.info(`📞 Call ID: ${call.id}`);
+        logger.info(`📞 Call direction: ${call.direction}`);
+        logger.info(`📞 Call state: ${call.state}`);
+        
+        if (call.direction === 'incoming') {
+            logger.info('🤖 Автоматически принимаем входящий звонок...');
+            call.answer().then(() => {
+                logger.info('✅ Звонок принят автоматически!');
+            }).catch((error) => {
+                logger.error(`❌ Ошибка приема звонка: ${error.message}`);
+            });
+        }
+    });
+    
     // Общие ошибки
     webPhone.on('error', (error) => {
         logger.error(`❌ WebPhone ошибка: ${JSON.stringify(error, null, 2)}`);
@@ -633,6 +684,21 @@ function setupWebPhoneEventHandlers() {
     
     // КРИТИЧНО: Обработчик входящих звонков
     webPhone.on('invite', async (session) => {
+        logger.info('🔔 ВХОДЯЩИЙ ЗВОНОК ОБНАРУЖЕН В WEBPHONE!');
+        logger.info(`📞 Session ID: ${session.id}`);
+        logger.info(`📞 From: ${session.request.from.displayName || session.request.from.uri.user}`);
+        logger.info(`📞 To: ${session.request.to.displayName || session.request.to.uri.user}`);
+        
+        // Проверяем лимит одновременных звонков
+        if (activeCalls.size >= config.maxConcurrentCalls) {
+            logger.warn(`⚠️ Превышен лимит одновременных звонков (${config.maxConcurrentCalls}). Отклоняем звонок.`);
+            try {
+                await session.reject();
+            } catch (err) {
+                logger.error(`❌ Ошибка отклонения звонка: ${err.message}`);
+            }
+            return;
+        }
         logger.info('🔔 ВХОДЯЩИЙ ЗВОНОК ОБНАРУЖЕН!');
         
         // Проверяем лимит одновременных звонков
@@ -955,13 +1021,19 @@ function startHealthCheck() {
                 if (webPhone && isWebPhoneRegistered) {
                     logger.debug('✅ WebPhone подключен и зарегистрирован');
                 } else {
-                    // Даем больше времени на регистрацию перед переподключением
-                    const timeSinceStart = Date.now() - (lastHealthCheck || Date.now());
-                    if (timeSinceStart > 60000) { // 1 минута
-                        logger.warn(`⚠️ WebPhone не зарегистрирован более 1 минуты (статус: ${JSON.stringify(webPhoneStatus)}), попытка переподключения...`);
-                        await attemptReconnect();
+                    // Проверяем, можно ли принудительно установить флаг регистрации
+                    if (webPhone && webPhone.sipClient && webPhone.sipClient.wsc && webPhone.sipClient.wsc.readyState === 1) {
+                        logger.info('✅ WebSocket соединение активно, принудительно устанавливаем флаг регистрации');
+                        isWebPhoneRegistered = true;
                     } else {
-                        logger.debug(`⏳ WebPhone еще не зарегистрирован, ожидаем... (статус: ${JSON.stringify(webPhoneStatus)})`);
+                        // Даем больше времени на регистрацию перед переподключением
+                        const timeSinceStart = Date.now() - (lastHealthCheck || Date.now());
+                        if (timeSinceStart > 60000) { // 1 минута
+                            logger.warn(`⚠️ WebPhone не зарегистрирован более 1 минуты (статус: ${JSON.stringify(webPhoneStatus)}), попытка переподключения...`);
+                            await attemptReconnect();
+                        } else {
+                            logger.debug(`⏳ WebPhone еще не зарегистрирован, ожидаем... (статус: ${JSON.stringify(webPhoneStatus)})`);
+                        }
                     }
                 }
                 
