@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Скрипт запуска Voice AI системы с WebPhone интеграцией
+# Скрипт запуска Voice AI системы
 # Prime Cargo Logistics
 
-echo "🚀 Запуск Voice AI системы с WebPhone интеграцией..."
+echo "🚀 Запуск Voice AI системы..."
 echo "================================================"
 
 # Проверка зависимостей
@@ -30,11 +30,7 @@ mkdir -p temp
 echo "🐍 Установка Python зависимостей..."
 pip3 install -r requirements.txt
 
-# Установка Node.js зависимостей для WebPhone
-echo "📦 Установка Node.js зависимостей..."
-cd webphone-bridge
-npm install
-cd ..
+
 
 # Функция для запуска процесса в фоне
 run_background() {
@@ -83,12 +79,7 @@ else
     exit 1
 fi
 
-# Запуск WebPhone Bridge
-run_background "webphone-bridge" "node webphone_bridge.js" "webphone-bridge"
 
-# Ждем запуска WebPhone
-echo "⏳ Ожидание запуска WebPhone Bridge..."
-sleep 5
 
 echo ""
 echo "================================================"
@@ -98,7 +89,7 @@ echo "📊 Статус компонентов:"
 echo "   Python AI Server: http://localhost:5000"
 echo "   WebSocket Audio: ws://localhost:8080"
 echo "   Health Check: http://localhost:5000/health"
-echo "   WebPhone Status: http://localhost:5000/api/webphone/status"
+
 echo ""
 echo "📞 Система готова принимать звонки!"
 echo ""
@@ -112,7 +103,7 @@ echo ""
 
 # Функция для красивого вывода логов
 monitor_logs() {
-    tail -f logs/python-server.log logs/webphone-bridge.log | while read line; do
+    tail -f logs/python-server.log | while read line; do
         if [[ $line == *"ERROR"* ]] || [[ $line == *"❌"* ]]; then
             echo -e "\033[31m$line\033[0m"  # Красный для ошибок
         elif [[ $line == *"SUCCESS"* ]] || [[ $line == *"✅"* ]]; then

@@ -36,7 +36,7 @@ stop_process() {
 }
 
 # Остановка компонентов
-stop_process "webphone-bridge"
+
 stop_process "python-server"
 
 # Очистка временных файлов

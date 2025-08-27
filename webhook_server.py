@@ -19,12 +19,11 @@ from flask_cors import CORS
 import threading
 from functools import wraps
 
-# Временно отключаем AI модули для тестирования WebPhone
-# from voice_ai_engine import voice_ai_engine
-# from speech_processor import async_synthesize
+from voice_ai_engine import voice_ai_engine
+from speech_processor import async_synthesize
 from config import Config
 from ringcentral_auth import make_request
-# from audio_stream_handler import audio_stream_handler  # Новый импорт
+
 
 # Заглушки для AI модулей
 class MockVoiceAIEngine:
@@ -86,7 +85,7 @@ class MockAudioStreamHandler:
         logger.info(f"🧪 MOCK: Обработка аудио для звонка {call_id}")
         return "Mock AI ответ"
 
-audio_stream_handler = MockAudioStreamHandler()
+# audio_stream_handler = MockAudioStreamHandler()
 
 # Настройка логирования
 logging.basicConfig(
@@ -140,43 +139,13 @@ answered_calls = set()  # Множество ID звонков, на котор�
 answer_lock = threading.Lock()
 
 def get_current_device_id():
-    """Получить актуальный Device ID из WebPhone Bridge"""
-    try:
-        # Пытаемся получить Device ID из WebPhone Bridge
-        import requests
-        webphone_response = requests.get('http://localhost:8081/status', timeout=2)
-        if webphone_response.status_code == 200:
-            webphone_status = webphone_response.json()
-            device_id = webphone_status.get('deviceId')
-            if device_id:
-                logger.info(f"📱 Получен Device ID из WebPhone Bridge: {device_id}")
-                return device_id
-    except Exception as e:
-        logger.warning(f"⚠️ Ошибка получения Device ID из WebPhone Bridge: {e}")
-    
-    # Fallback: пытаемся получить из логов WebPhone Bridge
-    try:
-        import subprocess
-        result = subprocess.run(['grep', '-o', 'Device ID: [0-9]*', 'webphone-bridge/webphone-bridge.log'], 
-                              capture_output=True, text=True, timeout=5)
-        if result.returncode == 0 and result.stdout:
-            # Берем последний Device ID из логов
-            lines = result.stdout.strip().split('\n')
-            if lines:
-                last_line = lines[-1]
-                device_id = last_line.split(': ')[-1]
-                logger.info(f"📱 Получен Device ID из логов: {device_id}")
-                return device_id
-    except Exception as e:
-        logger.warning(f"⚠️ Ошибка получения Device ID из логов: {e}")
-    
-    # Последний fallback - пытаемся получить из переменной окружения или использовать None
-    fallback_device_id = os.getenv('RINGCENTRAL_DEVICE_ID')
-    if fallback_device_id:
-        logger.warning(f"⚠️ Используем Device ID из переменной окружения: {fallback_device_id}")
-        return fallback_device_id
+    """Получить актуальный Device ID из переменной окружения"""
+    device_id = os.getenv('RINGCENTRAL_DEVICE_ID')
+    if device_id:
+        logger.info(f"📱 Получен Device ID из переменной окружения: {device_id}")
+        return device_id
     else:
-        logger.error("❌ Не удалось получить Device ID ни из одного источника")
+        logger.error("❌ Не удалось получить Device ID из переменной окружения")
         return None
 
 def get_device_id_from_webhook_event(webhook_data):
@@ -587,13 +556,10 @@ def _handle_telephony_session(session_data: Dict[str, Any], webhook_data: Dict[s
                 thread.start()
                 logger.info(f"📋 Запущен VoiceAIEngine для звонка {call_data['callId']}")
                 
-                # ✅ WebPhone автоматически принимает звонки, REST API ответ не нужен
+                # ✅ Обрабатываем входящий звонок через AI
                 # Добавляем webhook данные в call_data для полноты информации
                 call_data['webhook_data'] = webhook_data
-                logger.info(f"📞 WebPhone автоматически обработает звонок {call_data['callId']} (REST API ответ не требуется)")
-                
-                # ВНИМАНИЕ: Убрали дублирующий REST API ответ, так как WebPhone с autoAnswer=true
-                # уже принимает звонки автоматически
+                logger.info(f"📞 Обработка звонка {call_data['callId']} через AI")
                 
             elif direction == 'Inbound' and status.get('code') in ['Proceeding', 'Setup', 'Alerting']:
                 # Логируем входящие звонки в других состояниях без обработки  
@@ -841,8 +807,7 @@ def initiate_outbound_call(phone_number: str, device_id: str) -> bool:
     # 🔄 АЛЬТЕРНАТИВНЫЙ ПОДХОД: Попробуем несколько методов последовательно
     methods_to_try = [
         ("call_out", "Call-Out API (не требует Security scope)"),
-        ("ringout", "RingOut API (если есть разрешения)"),  
-        ("webphone_notify", "Уведомление WebPhone о необходимости звонка")
+        ("ringout", "RingOut API (если есть разрешения)")
     ]
     
     for method, description in methods_to_try:
@@ -904,40 +869,7 @@ def initiate_outbound_call(phone_number: str, device_id: str) -> bool:
                 logger.info(f"✅ RingOut звонок инициирован! Response: {ringout_response}")
                 return True
                 
-            elif method == "webphone_notify":
-                # 🔔 Уведомляем WebPhone о необходимости сделать исходящий звонок
-                logger.info(f"🔔 Уведомляем WebPhone о необходимости звонка на {phone_number}")
-                
-                # Отправляем команду WebPhone мосту
-                try:
-                    import requests
-                    webphone_data = {
-                        "action": "make_call",
-                        "to": phone_number,
-                        "from": device_id
-                    }
-                    
-                    # Предполагается, что WebPhone мост работает на порту 8081
-                    webphone_response = requests.post(
-                        'http://localhost:8081/make-call',
-                        json=webphone_data,
-                        timeout=5
-                    )
-                    
-                    if webphone_response.status_code == 200:
-                        logger.info(f"✅ WebPhone уведомлен о необходимости звонка на {phone_number}")
-                        return True
-                    else:
-                        logger.warn(f"⚠️ WebPhone ответил кодом {webphone_response.status_code}")
-                        
-                except Exception as webphone_error:
-                    logger.warn(f"⚠️ Не удалось связаться с WebPhone: {webphone_error}")
-                
-                # Fallback - просто логируем необходимость звонка  
-                logger.info(f"📝 ЗАМЕТКА: Необходимо совершить исходящий звонок на {phone_number}")
-                logger.info(f"📱 Рекомендуется использовать устройство {device_id}")
-                logger.info(f"💡 Альтернатива: Звонок можно сделать вручную через приложение RingCentral")
-                return True  # Возвращаем True чтобы не блокировать процесс
+
                 
         except Exception as method_error:
             logger.warn(f"⚠️ Метод {description} не сработал: {str(method_error)}")
@@ -1197,67 +1129,7 @@ async def initialize_ringcentral():
         logger.error(f"💥 Application startup failed: {e}")
         raise
 
-@app.route('/api/handle-webphone-call', methods=['POST'])
-def handle_webphone_call():
-    """
-    Обработка звонков от WebPhone Bridge
-    
-    Получает данные о новом звонке от JavaScript WebPhone
-    и инициализирует AI обработку
-    """
-    try:
-        logger.info("🌐 Получен запрос от WebPhone Bridge")
-        
-        # Получаем данные звонка
-        call_data = request.get_json()
-        if not call_data:
-            logger.error("❌ Нет данных в запросе")
-            return jsonify({"error": "No call data provided"}), 400
-        
-        logger.info(f"📞 Данные звонка от WebPhone:")
-        logger.info(f"   Call ID: {call_data.get('callId')}")
-        logger.info(f"   From: {call_data.get('from')}")
-        logger.info(f"   To: {call_data.get('to')}")
-        logger.info(f"   Session ID: {call_data.get('sessionId')}")
-        
-        # Обрабатываем звонок через audio stream handler
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        response = loop.run_until_complete(audio_stream_handler.handle_webphone_call(call_data))
-        
-        logger.info(f"✅ Звонок обработан: {response.get('status')}")
-        
-        return jsonify(response), 200
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка обработки WebPhone звонка: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        return jsonify({
-            "error": str(e),
-            "status": "error"
-        }), 500
 
-@app.route('/api/webphone/status', methods=['GET'])
-def webphone_status():
-    """Получить статус WebPhone интеграции"""
-    try:
-        active_calls = audio_stream_handler.get_active_calls()
-        
-        return jsonify({
-            "status": "operational",
-            "websocket_running": audio_stream_handler.is_running,
-            "active_calls": len(active_calls),
-            "calls": active_calls
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка получения статуса: {e}")
-        return jsonify({"error": str(e)}), 500
 
 def start_server():
     """Запуск webhook сервера"""
@@ -1278,17 +1150,7 @@ def start_server():
         # Инициализируем Voice AI engine
         logger.info("Инициализация Voice AI engine...")
         
-        # Запускаем WebSocket сервер для аудио стриминга
-        def start_audio_ws_server():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(audio_stream_handler.start_websocket_server(8080))
-            loop.run_forever()
-        
-        ws_thread = threading.Thread(target=start_audio_ws_server)
-        ws_thread.daemon = True
-        ws_thread.start()
-        logger.info("✅ WebSocket сервер для аудио запущен")
+
         
         # Запускаем сервер
         app.run(

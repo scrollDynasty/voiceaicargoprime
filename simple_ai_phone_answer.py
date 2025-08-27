@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Простое решение для AI ответа на звонки через RingCentral
-БЕЗ WebPhone SDK - только REST API
+Используя только REST API
 """
 
 import os

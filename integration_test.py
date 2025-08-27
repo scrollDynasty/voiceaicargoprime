@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Integration Test для Voice AI System с WebPhone
+Integration Test для Voice AI System
 Тестирует все компоненты системы
 """
 
@@ -65,46 +65,7 @@ class IntegrationTest:
         except Exception as e:
             self.add_result("Python Server", False, f"Ошибка: {str(e)}")
     
-    def test_webphone_endpoint(self):
-        """Тест WebPhone эндпоинта"""
-        logger.info("\n🧪 Тестирование WebPhone эндпоинта...")
-        
-        try:
-            # Тестовые данные звонка
-            test_call = {
-                "callId": "test-call-123",
-                "sessionId": "test-session-456",
-                "from": "+1234567890",
-                "to": "+0987654321",
-                "timestamp": datetime.now().isoformat(),
-                "source": "webphone"
-            }
-            
-            response = requests.post(
-                f"{self.python_server}/api/handle-webphone-call",
-                json=test_call,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('status') == 'success':
-                    self.add_result("WebPhone Endpoint", True, "Звонок успешно обработан")
-                    
-                    # Проверка генерации приветствия
-                    if data.get('greeting'):
-                        self.add_result("Greeting Generation", True, f"Приветствие: {data['greeting'][:50]}...")
-                    
-                    # Проверка аудио файла
-                    if data.get('audio_file'):
-                        self.add_result("TTS Audio", True, f"Аудио создано: {data['audio_file']}")
-                else:
-                    self.add_result("WebPhone Endpoint", False, f"Status: {data.get('status')}")
-            else:
-                self.add_result("WebPhone Endpoint", False, f"Status code: {response.status_code}")
-                
-        except Exception as e:
-            self.add_result("WebPhone Endpoint", False, f"Ошибка: {str(e)}")
+
     
     async def test_websocket_connection(self):
         """Тест WebSocket соединения"""
@@ -135,29 +96,7 @@ class IntegrationTest:
         except Exception as e:
             self.add_result("WebSocket Connection", False, f"Ошибка: {str(e)}")
     
-    def test_webphone_status(self):
-        """Тест статуса WebPhone интеграции"""
-        logger.info("\n🧪 Тестирование статуса WebPhone...")
-        
-        try:
-            response = requests.get(f"{self.python_server}/api/webphone/status", timeout=5)
-            
-            if response.status_code == 200:
-                data = response.json()
-                self.add_result("WebPhone Status", True, f"Status: {data.get('status')}")
-                
-                if data.get('websocket_running'):
-                    self.add_result("WebSocket Server", True, "WebSocket сервер работает")
-                else:
-                    self.add_result("WebSocket Server", False, "WebSocket сервер не запущен")
-                    
-                active_calls = data.get('active_calls', 0)
-                self.add_result("Active Calls", True, f"Активных звонков: {active_calls}")
-            else:
-                self.add_result("WebPhone Status", False, f"Status code: {response.status_code}")
-                
-        except Exception as e:
-            self.add_result("WebPhone Status", False, f"Ошибка: {str(e)}")
+
     
     async def test_ai_components(self):
         """Тест AI компонентов напрямую"""
@@ -237,9 +176,9 @@ class IntegrationTest:
         
         # Запускаем тесты
         self.test_python_server()
-        self.test_webphone_endpoint()
+
         await self.test_websocket_connection()
-        self.test_webphone_status()
+
         await self.test_ai_components()
         
         # Генерируем отчет

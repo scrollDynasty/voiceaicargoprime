@@ -26,7 +26,7 @@ def webhook():
         data = request.get_json()
         logger.info(f"📞 Получено webhook событие: {json.dumps(data, indent=2)}")
         
-        # Пересылаем событие в JS WebPhone Bridge
+        # Обрабатываем webhook событие
         try:
             response = requests.post(
                 f"{JS_SERVER_URL}/webhook",
@@ -48,23 +48,7 @@ def health():
     """Проверка здоровья сервера"""
     return jsonify({"status": "ok", "message": "Webhook server is running"}), 200
 
-@app.route('/api/handle-webphone-call', methods=['POST'])
-def handle_webphone_call():
-    """Обработка данных о звонке от WebPhone Bridge"""
-    try:
-        data = request.get_json()
-        logger.info(f"📞 Получены данные звонка от WebPhone: {json.dumps(data, indent=2)}")
-        
-        # Пока просто возвращаем OK
-        return jsonify({
-            "status": "ok", 
-            "message": "Call data received",
-            "callId": data.get("callId")
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка обработки данных звонка: {e}")
-        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     logger.info("🚀 Запуск упрощенного webhook сервера...")
