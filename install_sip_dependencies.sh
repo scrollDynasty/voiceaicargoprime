@@ -1,7 +1,7 @@
 #!/bin/bash
 
-echo "🚀 Установка зависимостей для SIP/RTP сервера"
-echo "============================================="
+echo "🚀 Установка зависимостей для SIP/RTP сервера с Ollama"
+echo "======================================================="
 
 # Обновляем систему
 echo "📦 Обновление системы..."
@@ -12,71 +12,65 @@ echo "🔧 Установка системных пакетов..."
 sudo apt-get install -y \
     python3-pip \
     python3-dev \
+    python3-venv \
     portaudio19-dev \
     libsndfile1 \
+    libsndfile1-dev \
     ffmpeg \
     libavcodec-dev \
-    libavformat-dev
+    libavformat-dev \
+    espeak \
+    curl
 
-# Устанавливаем Python пакеты для SIP/RTP
+# Создаем виртуальное окружение
+echo "🐍 Создание виртуального окружения..."
+python3 -m venv venv
+source venv/bin/activate
+
+# Обновляем pip
+echo "📦 Обновление pip..."
+pip install --upgrade pip
+
+# Устанавливаем Python пакеты
 echo "🐍 Установка Python пакетов..."
-pip3 install --upgrade pip
+pip install -r requirements.txt
 
-# SIP/RTP библиотеки
-pip3 install \
-    pyVoIP \
-    pjsua2 \
-    aiortc \
-    av
+# Проверяем установку Ollama
+echo "🤖 Проверка Ollama..."
+if ! command -v ollama &> /dev/null; then
+    echo "⚠️  Ollama не установлена. Устанавливаем..."
+    curl -fsSL https://ollama.com/install.sh | sh
+else
+    echo "✅ Ollama уже установлена"
+fi
 
-# Аудио обработка
-pip3 install \
-    pyaudio \
-    sounddevice \
-    scipy \
-    numpy
+# Проверяем, запущен ли Ollama
+if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+    echo "🚀 Запускаем Ollama сервер..."
+    ollama serve &
+    sleep 5
+fi
 
-# Удаляем веб-зависимости из requirements.txt
-echo "🧹 Обновляем requirements.txt (удаляем веб-компоненты)..."
-cat > requirements_sip.txt << EOF
-# Core SIP/RTP
-pyVoIP==1.6.5
-pjsua2
-aiortc
+# Проверяем наличие модели
+echo "🔍 Проверка модели LLaMA..."
+if ! ollama list | grep -q "llama3.1:8b-instruct-q4_0"; then
+    echo "📥 Загружаем модель llama3.1:8b-instruct-q4_0..."
+    ollama pull llama3.1:8b-instruct-q4_0
+else
+    echo "✅ Модель llama3.1:8b-instruct-q4_0 уже загружена"
+fi
 
-# Speech processing  
-openai-whisper
-torch
-torchaudio
-numpy
-librosa==0.10.1
-soundfile==0.12.1
-
-# Text-to-Speech
-TTS
-
-# Audio processing
-pydub==0.25.1
-webrtcvad
-pyaudio
-sounddevice
-scipy
-
-# AI
-openai
-anthropic
-
-# Utilities
-python-dotenv==1.0.0
-structlog
-
-# System utilities
-psutil
-EOF
-
+echo ""
 echo "✅ Установка завершена!"
 echo ""
-echo "📞 Теперь можно запустить SIP сервер:"
+echo "📋 Следующие шаги:"
+echo "1. Скопируйте .env.example в .env и настройте параметры:"
+echo "   cp .env.example .env"
+echo ""
+echo "2. Запустите тест Ollama:"
+echo "   python3 test_ollama.py"
+echo ""
+echo "3. Запустите SIP сервер:"
 echo "   python3 sip_server.py [IP_адрес] [SIP_порт]"
 echo ""
 echo "Пример:"

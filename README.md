@@ -26,7 +26,7 @@
                                      │                               │
                                      │                               ▼
                               ┌──────▼───────┐              ┌────────────────┐
-                              │ RTP Handler  │              │  OpenAI GPT    │
+                              │ RTP Handler  │              │  Ollama LLaMA  │
                               │(Ports 10000+)│              │  (AI Responses)│
                               └──────────────┘              └────────────────┘
 ```
@@ -69,8 +69,9 @@ chmod +x install_sip_dependencies.sh
 Создайте файл `.env`:
 
 ```bash
-# OpenAI API ключ для генерации ответов
-OPENAI_API_KEY=your_openai_api_key_here
+# Ollama настройки (если используется локальная модель)
+# OLLAMA_URL=http://localhost:11434
+# OLLAMA_MODEL=llama3.1:8b-instruct-q4_0
 
 # Опционально: настройки SIP
 SIP_PORT=5060
@@ -185,7 +186,7 @@ sudo kill -9 <PID>
 
 ### AI не отвечает:
 
-1. Проверьте OPENAI_API_KEY в .env файле
+1. Проверьте, что Ollama запущен (ollama serve) и модель загружена
 2. Проверьте интернет соединение
 3. Смотрите логи на наличие ошибок API
 
