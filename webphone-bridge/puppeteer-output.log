@@ -1,0 +1,20 @@
+2025-08-27T00:04:43.658Z [INFO] 🎯 Starting RingCentral WebPhone Bridge with Puppeteer...
+2025-08-27T00:04:43.659Z [INFO] 📋 Configuration:
+2025-08-27T00:04:43.660Z [INFO]    Client ID: bXCZ510zNm...
+2025-08-27T00:04:43.660Z [INFO]    Server: https://platform.ringcentral.com
+2025-08-27T00:04:43.660Z [INFO]    Python Server: http://localhost:5000
+2025-08-27T00:04:43.660Z [INFO]    Headless: false
+2025-08-27T00:04:43.662Z [INFO] 🌐 WebSocket server for browser started on port 8082
+2025-08-27T00:04:43.662Z [INFO] 🌐 WebSocket server for webhooks started on port 8081
+2025-08-27T00:04:43.662Z [INFO] 🚀 Launching Puppeteer browser...
+2025-08-27T00:04:43.664Z [INFO] 📁 HTTP server started on port 42849
+2025-08-27T00:04:43.997Z [INFO] ✅ Browser launched successfully
+2025-08-27T00:04:43.998Z [INFO] 📄 Loading WebPhone page...
+2025-08-27T00:04:45.500Z [ERROR] [Browser Console] Failed to load resource: the server responded with a status of 404 ()
+2025-08-27T00:04:45.501Z [ERROR] [Browser Console] Refused to execute script from 'https://cdn.jsdelivr.net/npm/@ringcentral/sdk@4.8.5/dist/ringcentral.min.js' because its MIME type ('text/plain') is not executable, and strict MIME type checking is enabled.
+2025-08-27T00:04:46.487Z [INFO] ✅ Browser WebSocket connected
+2025-08-27T00:04:46.490Z [INFO] [Browser Console] [info] ✅ WebSocket connected to Node.js JSHandle@object
+2025-08-27T00:04:46.490Z [INFO] [Browser Console] [error] ❌ Failed to initialize WebPhone JSHandle@object
+2025-08-27T00:04:46.490Z [ERROR] [Browser Console] Failed to initialize: JSHandle@error
+2025-08-27T00:04:46.493Z [ERROR] [Browser Console] Failed to load resource: the server responded with a status of 404 (Not Found)
+2025-08-27T00:04:48.489Z [INFO] ✅ WebPhone page loaded and configured

@@ -127,7 +127,7 @@ async function initializeWebPhone() {
             throw new Error('No configuration found. Please inject RINGCENTRAL_CONFIG.');
         }
         
-        // Initialize SDK
+        // Initialize SDK (v4 API)
         sdk = new RingCentral.SDK({
             clientId: config.clientId,
             clientSecret: config.clientSecret,
