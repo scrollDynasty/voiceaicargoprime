@@ -22,12 +22,13 @@ sounddevice
 scipy
 
 # AI
-openai
+# openai - заменено на Ollama
 anthropic
 
 # Utilities
 python-dotenv==1.0.0
 structlog
+requests
 
 # System utilities
 psutil
