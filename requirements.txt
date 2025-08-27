@@ -1,8 +1,3 @@
-# Core SIP/RTP
-pyVoIP==1.6.5
-pjsua2
-aiortc
-
 # Speech processing  
 openai-whisper
 torch
@@ -21,14 +16,12 @@ pyaudio
 sounddevice
 scipy
 
-# AI
-# openai - заменено на Ollama
-anthropic
+# AI (Ollama интеграция)
+requests
 
 # Utilities
 python-dotenv==1.0.0
 structlog
-requests
 
 # System utilities
 psutil
