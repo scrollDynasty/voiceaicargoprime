@@ -1,10 +1,9 @@
-# Core web framework
-Flask==3.0.0
-flask-cors==4.0.0
-requests
-python-dotenv==1.0.0
+# Core SIP/RTP
+pyVoIP==1.6.5
+pjsua2
+aiortc
 
-# Speech processing
+# Speech processing  
 openai-whisper
 torch
 torchaudio
@@ -15,24 +14,19 @@ soundfile==0.12.1
 # Text-to-Speech
 TTS
 
-# Audio processing  
+# Audio processing
 pydub==0.25.1
 webrtcvad
 pyaudio
+sounddevice
+scipy
 
-# WebSocket для аудио стриминга
-websockets==12.0
-aiohttp==3.9.1
-
-# RingCentral API
-ringcentral
+# AI
+openai
+anthropic
 
 # Utilities
-python-multipart
-aiofiles
-aiohttp
-
-# Logging and monitoring
+python-dotenv==1.0.0
 structlog
 
 # System utilities
